@@ -1,0 +1,30 @@
+export function formatarMoeda(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+export function formatarNumero(valor: number): string {
+  return valor.toLocaleString("pt-BR");
+}
+
+export function formatarDataCurta(isoDate: string): string {
+  const [ano, mes, dia] = isoDate.split("-");
+  return `${dia}/${mes}`;
+}
+
+export function formatarDataCompleta(isoDate: string): string {
+  const [ano, mes, dia] = isoDate.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+export function hojeISO(): string {
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const mes = String(agora.getMonth() + 1).padStart(2, "0");
+  const dia = String(agora.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+export function primeiroDiaDoMesISO(): string {
+  const agora = new Date();
+  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
+}
