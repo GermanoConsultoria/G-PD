@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ReqCompat as Request, ResCompat as Response } from "../lib/honoAdapter";
 import { z } from "zod";
 import { HttpError } from "../middleware/errorHandler";
@@ -8,6 +9,38 @@ import { registrarAuditoria } from "../services/audit";
 import { PerdaRow, ProdutoRow, mapPerda, mapProduto } from "../db/mappers";
 
 const PERDA_SELECT = "*, produto:produtos(*), turno:turnos(*), motivo:motivos_perda(*)";
+
+/**
+ * Uma perda só pode existir sobre o que já foi produzido: soma da produção
+ * do mesmo produto+turno+data, menos a soma das perdas já lançadas para essa
+ * mesma combinação (excluindo a própria perda, ao editar). Sem isso seria
+ * possível lançar perda de um produto nunca produzido, ou acima do que foi
+ * feito.
+ */
+async function calcularSaldoDisponivel(
+  client: SupabaseClient<any, string, any>,
+  produtoId: number,
+  turnoId: number,
+  data: string,
+  perdaIdExcluir?: number
+): Promise<number> {
+  const { data: producoesRows, error: producoesError } = await client
+    .from("producoes")
+    .select("quantidade")
+    .eq("produto_id", produtoId)
+    .eq("turno_id", turnoId)
+    .eq("data", data);
+  if (producoesError) throw new HttpError(500, producoesError.message);
+  const totalProduzido = (producoesRows ?? []).reduce((soma: number, r: { quantidade: number }) => soma + r.quantidade, 0);
+
+  let queryPerdas = client.from("perdas").select("quantidade").eq("produto_id", produtoId).eq("turno_id", turnoId).eq("data", data);
+  if (perdaIdExcluir !== undefined) queryPerdas = queryPerdas.neq("id", perdaIdExcluir);
+  const { data: perdasRows, error: perdasError } = await queryPerdas;
+  if (perdasError) throw new HttpError(500, perdasError.message);
+  const totalJaPerdido = (perdasRows ?? []).reduce((soma: number, r: { quantidade: number }) => soma + r.quantidade, 0);
+
+  return totalProduzido - totalJaPerdido;
+}
 
 const perdaSchema = z.object({
   produtoId: z.number().int().positive(),
@@ -72,6 +105,14 @@ export async function registrarPerda(req: Request, res: Response) {
     .maybeSingle();
   if (motivoError) throw new HttpError(500, motivoError.message);
   if (!motivo) throw new HttpError(404, "Motivo de perda não encontrado");
+
+  const saldoDisponivel = await calcularSaldoDisponivel(req.supabase, dados.produtoId, dados.turnoId, dados.data);
+  if (dados.quantidade > saldoDisponivel) {
+    throw new HttpError(
+      400,
+      `Saldo insuficiente: ${produto.nome} tem ${Math.max(saldoDisponivel, 0)} unidade(s) disponível(is) para perda no ${turno.nome} de ${dados.data} (produção lançada menos perdas já registradas). Lance a produção antes de registrar a perda.`
+    );
+  }
 
   // REGRA CRÍTICA: o custo unitário é capturado do cadastro de produto NO
   // MOMENTO do lançamento e gravado nesta linha. Alterações futuras no preço
@@ -139,6 +180,17 @@ export async function atualizarPerda(req: RequestComAdmin, res: Response) {
   }
 
   const quantidadeFinal = dados.quantidade ?? existente.quantidade;
+  const produtoIdFinal = dados.produtoId ?? existente.produtoId;
+  const turnoIdFinal = dados.turnoId ?? existente.turnoId;
+  const dataFinal = dados.data ?? existente.data;
+
+  const saldoDisponivel = await calcularSaldoDisponivel(req.supabase, produtoIdFinal, turnoIdFinal, dataFinal, id);
+  if (quantidadeFinal > saldoDisponivel) {
+    throw new HttpError(
+      400,
+      `Saldo insuficiente: apenas ${Math.max(saldoDisponivel, 0)} unidade(s) disponível(is) para perda nesta combinação de produto/turno/data (produção lançada menos outras perdas já registradas).`
+    );
+  }
 
   // REGRA: o custo histórico só é recalculado quando o PRODUTO do
   // lançamento é alterado. Uma correção de quantidade, data ou turno,

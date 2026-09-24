@@ -20,6 +20,8 @@ beforeAll(async () => {
 
 describe("perdas", () => {
   it("custo histórico é gravado a partir do custo vigente do produto ao criar", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-01", quantidade: 10 } });
+
     const resposta = await req("POST", "/api/perdas", {
       body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-01", quantidade: 10 },
     });
@@ -30,6 +32,8 @@ describe("perdas", () => {
   });
 
   it("alterar o custo do produto depois NÃO afeta perda já registrada (custo histórico)", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-02", quantidade: 5 } });
+
     const criada = await req("POST", "/api/perdas", {
       body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-02", quantidade: 5 },
     });
@@ -52,6 +56,8 @@ describe("perdas", () => {
   });
 
   it("edição administrativa que só corrige a quantidade preserva o custo unitário histórico", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-03", quantidade: 6 } });
+
     const criada = await req("POST", "/api/perdas", {
       body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-03", quantidade: 4 },
     });
@@ -65,6 +71,9 @@ describe("perdas", () => {
   });
 
   it("edição administrativa que troca o produto recalcula o custo histórico e audita a mudança", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-04", quantidade: 3 } });
+    await req("POST", "/api/producoes", { body: { produtoId: produtoPalitoId, turnoId: turnoT1Id, data: "2026-09-04", quantidade: 3 } });
+
     const criada = await req("POST", "/api/perdas", {
       body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-04", quantidade: 3 },
     });
@@ -85,6 +94,8 @@ describe("perdas", () => {
   });
 
   it("admin exclui perda e a auditoria preserva os dados do registro removido", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-05", quantidade: 2 } });
+
     const criada = await req("POST", "/api/perdas", {
       body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-05", quantidade: 2 },
     });
@@ -97,5 +108,60 @@ describe("perdas", () => {
     const exclusao = auditoria.body.find((log: { acao: string }) => log.acao === "EXCLUSAO");
     expect(exclusao).toBeTruthy();
     expect(exclusao.valorAnterior).toContain("Torta");
+  });
+});
+
+describe("saldo disponível para perda (produção - perdas já lançadas)", () => {
+  it("recusa lançar perda de um produto que não teve produção lançada no turno/data", async () => {
+    const resposta = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-06", quantidade: 1 },
+    });
+
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.error).toContain("Saldo insuficiente");
+  });
+
+  it("recusa lançar perda maior que o saldo produzido no turno/data", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-07", quantidade: 5 } });
+
+    const resposta = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-07", quantidade: 6 },
+    });
+
+    expect(resposta.status).toBe(400);
+    expect(resposta.body.error).toContain("Saldo insuficiente");
+  });
+
+  it("aceita lançar perda até o saldo exato, considerando perdas já lançadas na mesma combinação", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-08", quantidade: 10 } });
+
+    const primeira = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-08", quantidade: 7 },
+    });
+    expect(primeira.status).toBe(201);
+
+    const segunda = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-08", quantidade: 3 },
+    });
+    expect(segunda.status).toBe(201);
+
+    const terceira = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-08", quantidade: 1 },
+    });
+    expect(terceira.status).toBe(400);
+    expect(terceira.body.error).toContain("Saldo insuficiente");
+  });
+
+  it("edição que aumentaria a perda além do saldo disponível é recusada", async () => {
+    await req("POST", "/api/producoes", { body: { produtoId: produtoTortaId, turnoId: turnoT1Id, data: "2026-09-09", quantidade: 5 } });
+
+    const criada = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-09", quantidade: 5 },
+    });
+    expect(criada.status).toBe(201);
+
+    const editada = await req("PUT", `/api/perdas/${criada.body.id}`, { token, body: { quantidade: 6 } });
+    expect(editada.status).toBe(400);
+    expect(editada.body.error).toContain("Saldo insuficiente");
   });
 });
