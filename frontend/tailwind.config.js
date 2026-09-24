@@ -1,18 +1,30 @@
 /** @type {import('tailwindcss').Config} */
+
+// Cores que trocam entre tema claro/escuro são lidas de variáveis CSS (ver
+// index.css, blocos :root e .dark), permitindo alternar o tema sem tocar em
+// nenhuma classe nos componentes. Suporta o modificador de opacidade do
+// Tailwind (ex: bg-status-good/10) via rgb(var(--x) / <alpha>).
+function corVariavel(variavel) {
+  return ({ opacityValue }) =>
+    opacityValue === undefined ? `rgb(var(${variavel}))` : `rgb(var(${variavel}) / ${opacityValue})`;
+}
+
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        surface: "#fcfcfb",
-        page: "#f9f9f7",
+        surface: corVariavel("--color-surface"),
+        page: corVariavel("--color-page"),
         ink: {
-          primary: "#0b0b0b",
-          secondary: "#52514e",
-          muted: "#898781",
+          primary: corVariavel("--color-ink-primary"),
+          secondary: corVariavel("--color-ink-secondary"),
+          muted: corVariavel("--color-ink-muted"),
         },
-        grid: "#e1e0d9",
-        baseline: "#c3c2b7",
+        grid: corVariavel("--color-grid"),
+        baseline: corVariavel("--color-baseline"),
+        // Cores de marca/estado: propositalmente constantes nos dois temas.
         series: {
           1: "#2a78d6",
           2: "#eb6834",

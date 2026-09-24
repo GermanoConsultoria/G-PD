@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-surface: 252 252 251;
+  --color-page: 249 249 247;
+  --color-ink-primary: 11 11 11;
+  --color-ink-secondary: 82 81 78;
+  --color-ink-muted: 137 135 129;
+  --color-grid: 225 224 217;
+  --color-baseline: 195 194 183;
+}
+
+.dark {
+  --color-surface: 32 31 29;
+  --color-page: 20 20 18;
+  --color-ink-primary: 245 244 241;
+  --color-ink-secondary: 184 182 176;
+  --color-ink-muted: 131 127 120;
+  --color-grid: 58 57 54;
+  --color-baseline: 74 73 69;
+}
+
 html,
 body,
 #root {
@@ -9,8 +29,8 @@ body,
 }
 
 body {
-  background-color: theme("colors.page");
-  color: theme("colors.ink.primary");
+  background-color: rgb(var(--color-page));
+  color: rgb(var(--color-ink-primary));
   -webkit-tap-highlight-color: transparent;
 }
 

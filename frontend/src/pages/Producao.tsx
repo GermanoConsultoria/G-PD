@@ -16,6 +16,7 @@ import { ProductGrid } from "../components/tablet/ProductGrid";
 import { ShiftDateBar } from "../components/tablet/ShiftDateBar";
 import { StatusHeader } from "../components/tablet/StatusHeader";
 import { SuccessScreen } from "../components/tablet/SuccessScreen";
+import { ThemeToggle } from "../components/layout/ThemeToggle";
 import { hojeISO } from "../utils/format";
 
 type Modo = "producao" | "perda";
@@ -51,6 +52,7 @@ export function Producao() {
   const [etapa, setEtapa] = useState<Etapa>({ tipo: "home" });
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     Promise.all([getProdutos(true), getTurnos(), getMotivos(), getContextoAtual()]).then(
@@ -61,6 +63,7 @@ export function Producao() {
         setData(contexto.data);
         setEmHorarioOperacional(contexto.emHorarioOperacional);
         setTurnoId(contexto.turno?.id ?? null);
+        setCarregando(false);
       }
     );
   }, []);
@@ -169,13 +172,22 @@ export function Producao() {
       {etapa.tipo === "home" && (
         <div className="p-4">
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-3">
               <Link to="/dashboard" className="text-xs text-ink-muted underline">
                 Painel do Gestor
               </Link>
+              <ThemeToggle />
             </div>
 
-            <StatusHeader data={data} emHorarioOperacional={emHorarioOperacional} turnoAtual={turnoAtual} turnos={turnos} />
+            {carregando ? (
+              <div className="animate-pulse rounded-2xl border border-grid bg-surface p-5">
+                <div className="h-4 w-24 rounded bg-grid" />
+                <div className="mt-4 h-3 w-40 rounded bg-grid" />
+                <div className="mt-2 h-7 w-32 rounded bg-grid" />
+              </div>
+            ) : (
+              <StatusHeader data={data} emHorarioOperacional={emHorarioOperacional} turnoAtual={turnoAtual} turnos={turnos} />
+            )}
 
             <button
               type="button"
@@ -202,7 +214,7 @@ export function Producao() {
                 type="button"
                 disabled={bloqueadoPorHorario || turnoId === null}
                 onClick={() => abrirModo("perda")}
-                className="rounded-2xl bg-series-2 py-10 text-3xl font-extrabold text-white shadow-sm transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-2xl bg-status-critical py-10 text-3xl font-extrabold text-white shadow-sm transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 PERDA
               </button>
@@ -224,14 +236,14 @@ export function Producao() {
               <button type="button" onClick={irParaHome} className="text-sm font-medium text-ink-muted underline">
                 ← Voltar
               </button>
-              <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${etapa.modo === "producao" ? "bg-series-1" : "bg-series-2"}`}>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${etapa.modo === "producao" ? "bg-series-1" : "bg-status-critical"}`}>
                 {etapa.modo === "producao" ? "PRODUÇÃO" : "PERDA"}
               </span>
             </div>
             <p className="text-center text-lg font-semibold text-ink-primary">Selecione o produto</p>
             <ProductGrid
               produtos={produtos}
-              classeAtiva={etapa.modo === "producao" ? "active:border-series-1 active:bg-series-1/10" : "active:border-series-2 active:bg-series-2/10"}
+              classeAtiva={etapa.modo === "producao" ? "active:border-series-1 active:bg-series-1/10" : "active:border-status-critical active:bg-status-critical/10"}
               onSelecionar={selecionarProduto}
             />
           </div>
@@ -242,7 +254,7 @@ export function Producao() {
         <NumericKeypad
           titulo={etapa.modo === "producao" ? "Quantos foram produzidos?" : "Quantos foram perdidos?"}
           subtitulo={etapa.produto.nome}
-          corDestaque={etapa.modo === "producao" ? "bg-series-1" : "bg-series-2"}
+          corDestaque={etapa.modo === "producao" ? "bg-series-1" : "bg-status-critical"}
           erro={erro}
           enviando={enviando}
           onConfirmar={confirmarQuantidade}

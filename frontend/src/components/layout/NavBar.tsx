@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { clearAdminToken } from "../../api/client";
+import { ThemeToggle } from "./ThemeToggle";
 
 const linkBase = "rounded-lg px-3 py-2.5 text-sm font-medium transition-colors";
 const linkAtivo = "bg-series-1 text-white";
@@ -23,6 +24,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <header className="flex items-center justify-between border-b border-grid bg-surface px-5 py-3">
         <span className="text-lg font-extrabold tracking-tight text-series-1">G-PD</span>
         <div className="flex items-center gap-3 text-sm text-ink-secondary">
+          <ThemeToggle />
           <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Admin</span>
           <span className="text-ink-muted">•</span>
           <button type="button" onClick={handleSair} className="font-medium text-ink-secondary hover:text-ink-primary">

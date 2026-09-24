@@ -22,7 +22,7 @@ export function SuccessScreen({
   custoTotalCentavos,
   onNovoLancamento,
 }: SuccessScreenProps) {
-  const cor = tipo === "producao" ? "bg-status-good" : "bg-series-2";
+  const cor = tipo === "producao" ? "bg-status-good" : "bg-status-critical";
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-page p-6 animate-[fadeIn_0.2s_ease-out]">
