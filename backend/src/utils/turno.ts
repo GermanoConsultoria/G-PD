@@ -37,3 +37,18 @@ export function dataAtualISO(agora: Date = new Date()): string {
   const dia = String(agora.getDate()).padStart(2, "0");
   return `${ano}-${mes}-${dia}`;
 }
+
+/**
+ * Um turno só pode ser considerado "encerrado" em relação ao lançamento de
+ * HOJE — datas passadas são correções/backfill e todo turno delas já
+ * terminou há muito, então não se aplica. Evita que alguém volte para um
+ * turno de hoje que já fechou (ex: selecionar Turno 1 às 15h) e lance como
+ * se ainda estivesse em andamento.
+ */
+export function turnoEncerrouHoje(horaFim: string, dataLancamento: string, agora: Date = new Date()): boolean {
+  if (dataLancamento !== dataAtualISO(agora)) return false;
+
+  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+  const [hora, minuto] = horaFim.split(":").map(Number);
+  return minutosAgora >= hora * 60 + minuto;
+}

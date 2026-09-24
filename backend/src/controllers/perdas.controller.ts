@@ -3,6 +3,7 @@ import { z } from "zod";
 import { HttpError } from "../middleware/errorHandler";
 import { RequestComAdmin } from "../middleware/auth";
 import { resolverIntervaloDatas } from "../utils/dateRange";
+import { turnoEncerrouHoje } from "../utils/turno";
 import { registrarAuditoria } from "../services/audit";
 import { PerdaRow, ProdutoRow, mapPerda, mapProduto } from "../db/mappers";
 
@@ -54,11 +55,15 @@ export async function registrarPerda(req: Request, res: Response) {
 
   const { data: turno, error: turnoError } = await req.supabase
     .from("turnos")
-    .select("id")
+    .select("id, nome, hora_fim")
     .eq("id", dados.turnoId)
     .maybeSingle();
   if (turnoError) throw new HttpError(500, turnoError.message);
   if (!turno) throw new HttpError(404, "Turno não encontrado");
+
+  if (turnoEncerrouHoje(turno.hora_fim, dados.data)) {
+    throw new HttpError(400, `O ${turno.nome} já encerrou hoje às ${turno.hora_fim}. Selecione o turno atual.`);
+  }
 
   const { data: motivo, error: motivoError } = await req.supabase
     .from("motivos_perda")
