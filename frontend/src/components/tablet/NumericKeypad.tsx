@@ -4,13 +4,23 @@ interface NumericKeypadProps {
   titulo: string;
   subtitulo?: string;
   corDestaque?: string;
+  erro?: string | null;
+  enviando?: boolean;
   onConfirmar: (quantidade: number) => void;
   onCancelar: () => void;
 }
 
 const teclas = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "limpar", "0", "apagar"];
 
-export function NumericKeypad({ titulo, subtitulo, corDestaque = "bg-series-1", onConfirmar, onCancelar }: NumericKeypadProps) {
+export function NumericKeypad({
+  titulo,
+  subtitulo,
+  corDestaque = "bg-series-1",
+  erro,
+  enviando = false,
+  onConfirmar,
+  onCancelar,
+}: NumericKeypadProps) {
   const [valor, setValor] = useState("");
 
   function pressionar(tecla: string) {
@@ -25,22 +35,28 @@ export function NumericKeypad({ titulo, subtitulo, corDestaque = "bg-series-1", 
   const valido = quantidade > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-xl">
-        <p className="text-center text-lg font-semibold text-ink-primary">{titulo}</p>
-        {subtitulo && <p className="mb-2 text-center text-sm text-ink-secondary">{subtitulo}</p>}
+    <div className="fixed inset-0 z-40 flex flex-col bg-page p-4 animate-[slideUp_0.15s_ease-out]">
+      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-1 text-center">
+        {subtitulo && <p className="text-2xl font-extrabold text-ink-primary">{subtitulo}</p>}
+        <p className="mb-4 text-base font-medium text-ink-secondary">{titulo}</p>
 
-        <div className="my-4 rounded-xl border border-grid bg-page py-4 text-center text-5xl font-bold text-ink-primary">
+        <div className="rounded-2xl border border-grid bg-surface py-6 text-center text-6xl font-extrabold tabular-nums text-ink-primary">
           {valor || "0"}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {erro && (
+          <div className="mt-4 rounded-xl border border-status-critical bg-status-critical/10 px-4 py-3 text-left text-sm text-status-critical">
+            {erro}
+          </div>
+        )}
+
+        <div className="mt-4 grid grid-cols-3 gap-3">
           {teclas.map((tecla) => (
             <button
               key={tecla}
               type="button"
               onClick={() => pressionar(tecla)}
-              className="h-16 rounded-xl bg-page text-2xl font-semibold text-ink-primary active:scale-95 active:bg-black/10"
+              className="h-16 rounded-xl bg-surface text-2xl font-semibold text-ink-primary shadow-sm active:scale-95 active:bg-black/10"
             >
               {tecla === "limpar" ? "C" : tecla === "apagar" ? "⌫" : tecla}
             </button>
@@ -57,11 +73,11 @@ export function NumericKeypad({ titulo, subtitulo, corDestaque = "bg-series-1", 
           </button>
           <button
             type="button"
-            disabled={!valido}
+            disabled={!valido || enviando}
             onClick={() => onConfirmar(quantidade)}
             className={`flex-1 rounded-xl py-4 text-lg font-semibold text-white active:scale-95 disabled:opacity-40 ${corDestaque}`}
           >
-            Confirmar
+            {enviando ? "Enviando..." : "Confirmar"}
           </button>
         </div>
       </div>

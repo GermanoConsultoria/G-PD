@@ -29,7 +29,7 @@ export function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-page p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-2xl border border-grid bg-surface p-6 shadow-sm">
-        <h1 className="text-center text-xl font-bold text-ink-primary">Controle de Produção</h1>
+        <h1 className="text-center text-2xl font-extrabold tracking-tight text-series-1">G-PD</h1>
         <p className="mb-6 text-center text-sm text-ink-secondary">Área Administrativa</p>
 
         <label className="mb-1 block text-xs font-medium text-ink-secondary">Senha</label>

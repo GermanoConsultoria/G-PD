@@ -12,8 +12,30 @@ const ROTULO_ACAO: Record<AuditLog["acao"], string> = {
   EXCLUSAO: "Exclusão",
 };
 
+const COR_ACAO: Record<AuditLog["acao"], string> = {
+  CRIACAO: "bg-status-good/10 text-status-good",
+  EDICAO: "bg-series-4/10 text-series-4",
+  EXCLUSAO: "bg-status-critical/10 text-status-critical",
+};
+
 function formatarDataHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR");
+}
+
+/** Snapshots de EXCLUSAO/CRIACAO são JSON serializado; formata legível quando for o caso. */
+function formatarValor(valor: string | null): string {
+  if (valor === null) return "—";
+  try {
+    const obj = JSON.parse(valor);
+    if (obj && typeof obj === "object") {
+      return Object.entries(obj)
+        .map(([chave, v]) => `${chave}: ${v}`)
+        .join("\n");
+    }
+  } catch {
+    // não é JSON — é um valor simples (ex: campo numérico de uma EDICAO)
+  }
+  return valor;
 }
 
 export function Auditoria() {
@@ -98,15 +120,19 @@ export function Auditoria() {
               <tr key={log.id} className="border-b border-grid last:border-0 align-top">
                 <td className="whitespace-nowrap px-4 py-3 text-ink-primary">{formatarDataHora(log.criadoEm)}</td>
                 <td className="px-4 py-3 text-ink-secondary">{log.administrador}</td>
-                <td className="px-4 py-3 text-ink-secondary">{ROTULO_ACAO[log.acao]}</td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${COR_ACAO[log.acao]}`}>
+                    {ROTULO_ACAO[log.acao]}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-ink-secondary">{log.entidade}</td>
                 <td className="px-4 py-3 text-ink-secondary">#{log.entidadeId}</td>
                 <td className="px-4 py-3 text-ink-secondary">{log.campo ?? "—"}</td>
-                <td className="max-w-[220px] whitespace-pre-wrap break-words px-4 py-3 text-ink-secondary">
-                  {log.valorAnterior ?? "—"}
+                <td className="max-w-[240px] whitespace-pre-wrap break-words px-4 py-3 text-ink-secondary">
+                  {formatarValor(log.valorAnterior)}
                 </td>
-                <td className="max-w-[220px] whitespace-pre-wrap break-words px-4 py-3 text-ink-secondary">
-                  {log.valorNovo ?? "—"}
+                <td className="max-w-[240px] whitespace-pre-wrap break-words px-4 py-3 text-ink-secondary">
+                  {formatarValor(log.valorNovo)}
                 </td>
               </tr>
             ))}

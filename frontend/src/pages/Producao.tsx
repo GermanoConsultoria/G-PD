@@ -10,27 +10,47 @@ import {
 } from "../api/endpoints";
 import { extrairMensagemErro } from "../api/client";
 import type { MotivoPerda, Produto, Turno } from "../api/types";
-import { ConfirmToast } from "../components/tablet/ConfirmToast";
 import { MotivoPicker } from "../components/tablet/MotivoPicker";
 import { NumericKeypad } from "../components/tablet/NumericKeypad";
 import { ProductGrid } from "../components/tablet/ProductGrid";
 import { ShiftDateBar } from "../components/tablet/ShiftDateBar";
+import { StatusHeader } from "../components/tablet/StatusHeader";
+import { SuccessScreen } from "../components/tablet/SuccessScreen";
 import { hojeISO } from "../utils/format";
 
 type Modo = "producao" | "perda";
-type Etapa = { tipo: "idle" } | { tipo: "quantidade"; produto: Produto } | { tipo: "motivo"; produto: Produto; quantidade: number };
+
+type Etapa =
+  | { tipo: "home" }
+  | { tipo: "produto"; modo: Modo }
+  | { tipo: "quantidade"; modo: Modo; produto: Produto }
+  | { tipo: "motivo"; produto: Produto; quantidade: number }
+  | {
+      tipo: "sucesso";
+      modo: Modo;
+      produtoNome: string;
+      quantidade: number;
+      turnoNome: string;
+      data: string;
+      motivoNome?: string;
+      custoTotalCentavos?: number;
+    };
+
+const REFRESH_CONTEXTO_MS = 30_000;
 
 export function Producao() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [motivos, setMotivos] = useState<MotivoPerda[]>([]);
 
-  const [modo, setModo] = useState<Modo>("producao");
   const [data, setData] = useState(hojeISO());
   const [turnoId, setTurnoId] = useState<number | null>(null);
   const [emHorarioOperacional, setEmHorarioOperacional] = useState(true);
-  const [etapa, setEtapa] = useState<Etapa>({ tipo: "idle" });
-  const [toast, setToast] = useState<{ mensagem: string; tipo: "sucesso" | "erro" } | null>(null);
+  const [mostrarAjuste, setMostrarAjuste] = useState(false);
+
+  const [etapa, setEtapa] = useState<Etapa>({ tipo: "home" });
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
     Promise.all([getProdutos(true), getTurnos(), getMotivos(), getContextoAtual()]).then(
@@ -45,35 +65,77 @@ export function Producao() {
     );
   }, []);
 
+  // Mantém turno/horário em dia num tablet que fica ligado durante a troca de
+  // turno (06:00, 14:00, 22:00), sem interferir se a pessoa ajustou manualmente
+  // a data para lançar um dia retroativo.
   useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2500);
-    return () => clearTimeout(timer);
-  }, [toast]);
+    if (etapa.tipo !== "home") return;
+    const intervalo = setInterval(() => {
+      getContextoAtual().then((contexto) => {
+        setEmHorarioOperacional(contexto.emHorarioOperacional);
+        setData((dataAtual) => {
+          if (dataAtual !== hojeISO()) return dataAtual;
+          setTurnoId(contexto.turno?.id ?? null);
+          return contexto.data;
+        });
+      });
+    }, REFRESH_CONTEXTO_MS);
+    return () => clearInterval(intervalo);
+  }, [etapa.tipo]);
 
-  function mostrarToast(mensagem: string, tipo: "sucesso" | "erro") {
-    setToast({ mensagem, tipo });
+  const bloqueadoPorHorario = !emHorarioOperacional && data === hojeISO();
+  const turnoAtual = turnos.find((t) => t.id === turnoId) ?? null;
+
+  function irParaHome() {
+    setErro(null);
+    setEtapa({ tipo: "home" });
+    getContextoAtual().then((contexto) => {
+      setEmHorarioOperacional(contexto.emHorarioOperacional);
+      if (data === hojeISO() || data === contexto.data) {
+        setData(contexto.data);
+        setTurnoId(contexto.turno?.id ?? null);
+      }
+    });
+  }
+
+  function abrirModo(modo: Modo) {
+    if (bloqueadoPorHorario || turnoId === null) return;
+    setErro(null);
+    setEtapa({ tipo: "produto", modo });
+  }
+
+  function selecionarProduto(produto: Produto) {
+    if (etapa.tipo !== "produto") return;
+    setErro(null);
+    setEtapa({ tipo: "quantidade", modo: etapa.modo, produto });
   }
 
   async function confirmarQuantidade(quantidade: number) {
     if (etapa.tipo !== "quantidade" || turnoId === null) return;
-    const produto = etapa.produto;
+    const { modo, produto } = etapa;
 
-    if (modo === "producao") {
-      try {
-        await registrarProducao({ produtoId: produto.id, turnoId, data, quantidade });
-        mostrarToast(`Produção registrada: ${quantidade} ${produto.nome}`, "sucesso");
-        setEtapa({ tipo: "idle" });
-      } catch (error) {
-        mostrarToast(
-          extrairMensagemErro(error, "Não foi possível registrar a produção. Verifique a conexão e tente novamente."),
-          "erro"
-        );
-        // Não limpa a etapa nem a quantidade digitada: o teclado permanece
-        // aberto para o usuário tentar novamente sem perder o que já digitou.
-      }
-    } else {
+    if (modo === "perda") {
+      setErro(null);
       setEtapa({ tipo: "motivo", produto, quantidade });
+      return;
+    }
+
+    setEnviando(true);
+    setErro(null);
+    try {
+      await registrarProducao({ produtoId: produto.id, turnoId, data, quantidade });
+      setEtapa({
+        tipo: "sucesso",
+        modo: "producao",
+        produtoNome: produto.nome,
+        quantidade,
+        turnoNome: turnoAtual?.nome ?? "",
+        data,
+      });
+    } catch (error) {
+      setErro(extrairMensagemErro(error, "Não foi possível registrar o lançamento. Verifique a conexão e tente novamente."));
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -81,93 +143,137 @@ export function Producao() {
     if (etapa.tipo !== "motivo" || turnoId === null) return;
     const { produto, quantidade } = etapa;
 
+    setEnviando(true);
+    setErro(null);
     try {
-      await registrarPerda({ produtoId: produto.id, turnoId, motivoId: motivo.id, data, quantidade });
-      mostrarToast(`Perda registrada: ${quantidade} ${produto.nome} (${motivo.nome})`, "sucesso");
-      setEtapa({ tipo: "idle" });
+      const perda = await registrarPerda({ produtoId: produto.id, turnoId, motivoId: motivo.id, data, quantidade });
+      setEtapa({
+        tipo: "sucesso",
+        modo: "perda",
+        produtoNome: produto.nome,
+        quantidade,
+        turnoNome: turnoAtual?.nome ?? "",
+        data,
+        motivoNome: motivo.nome,
+        custoTotalCentavos: perda.custoTotalCentavos,
+      });
     } catch (error) {
-      mostrarToast(
-        extrairMensagemErro(error, "Não foi possível registrar a perda. Verifique a conexão e tente novamente."),
-        "erro"
-      );
-      // Mantém produto/quantidade/motivo disponíveis para nova tentativa.
+      setErro(extrairMensagemErro(error, "Não foi possível registrar o lançamento. Verifique a conexão e tente novamente."));
+    } finally {
+      setEnviando(false);
     }
   }
 
-  const classeAtivaProducao = "active:border-series-1 active:bg-series-1/10";
-  const classeAtivaPerda = "active:border-status-critical active:bg-status-critical/10";
-
   return (
-    <div className="tablet-shell min-h-screen p-4">
-      <div className="mx-auto flex max-w-4xl flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-ink-primary">Lançamento de Produção</h1>
-          <Link to="/dashboard" className="text-xs text-ink-muted underline">
-            Painel do Gestor
-          </Link>
-        </div>
+    <div className="tablet-shell min-h-screen bg-page">
+      {etapa.tipo === "home" && (
+        <div className="p-4">
+          <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            <div className="flex items-center justify-end">
+              <Link to="/dashboard" className="text-xs text-ink-muted underline">
+                Painel do Gestor
+              </Link>
+            </div>
 
-        {!emHorarioOperacional && (
-          <div className="rounded-xl border border-status-critical bg-status-critical/10 px-4 py-3 text-sm font-medium text-status-critical">
-            Fora do horário operacional. Selecione o turno manualmente para continuar lançando.
+            <StatusHeader data={data} emHorarioOperacional={emHorarioOperacional} turnoAtual={turnoAtual} turnos={turnos} />
+
+            <button
+              type="button"
+              onClick={() => setMostrarAjuste((v) => !v)}
+              className="self-start text-xs font-medium text-ink-muted underline"
+            >
+              {mostrarAjuste ? "Ocultar ajuste de data/turno" : "Ajustar data ou turno (lançamento retroativo)"}
+            </button>
+
+            {mostrarAjuste && (
+              <ShiftDateBar data={data} turnos={turnos} turnoId={turnoId} onMudarData={setData} onMudarTurno={setTurnoId} />
+            )}
+
+            <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={bloqueadoPorHorario || turnoId === null}
+                onClick={() => abrirModo("producao")}
+                className="rounded-2xl bg-series-1 py-10 text-3xl font-extrabold text-white shadow-sm transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                PRODUÇÃO
+              </button>
+              <button
+                type="button"
+                disabled={bloqueadoPorHorario || turnoId === null}
+                onClick={() => abrirModo("perda")}
+                className="rounded-2xl bg-series-2 py-10 text-3xl font-extrabold text-white shadow-sm transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                PERDA
+              </button>
+            </div>
+
+            {bloqueadoPorHorario && (
+              <p className="text-center text-sm text-ink-muted">
+                Não é possível registrar lançamentos agora. Use "Ajustar data" apenas para corrigir um dia anterior.
+              </p>
+            )}
           </div>
-        )}
-
-        <ShiftDateBar
-          data={data}
-          turnos={turnos}
-          turnoId={turnoId}
-          onMudarData={setData}
-          onMudarTurno={setTurnoId}
-        />
-
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setModo("producao")}
-            className={`rounded-2xl py-5 text-lg font-bold ${
-              modo === "producao" ? "bg-series-1 text-white" : "border border-grid bg-surface text-ink-secondary"
-            }`}
-          >
-            Registrar Produção
-          </button>
-          <button
-            type="button"
-            onClick={() => setModo("perda")}
-            className={`rounded-2xl py-5 text-lg font-bold ${
-              modo === "perda" ? "bg-status-critical text-white" : "border border-grid bg-surface text-ink-secondary"
-            }`}
-          >
-            Registrar Perda
-          </button>
         </div>
+      )}
 
-        <ProductGrid
-          produtos={produtos}
-          classeAtiva={modo === "producao" ? classeAtivaProducao : classeAtivaPerda}
-          onSelecionar={(produto) => setEtapa({ tipo: "quantidade", produto })}
-        />
-      </div>
+      {etapa.tipo === "produto" && (
+        <div className="flex min-h-screen flex-col p-4 animate-[slideUp_0.15s_ease-out]">
+          <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={irParaHome} className="text-sm font-medium text-ink-muted underline">
+                ← Voltar
+              </button>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${etapa.modo === "producao" ? "bg-series-1" : "bg-series-2"}`}>
+                {etapa.modo === "producao" ? "PRODUÇÃO" : "PERDA"}
+              </span>
+            </div>
+            <p className="text-center text-lg font-semibold text-ink-primary">Selecione o produto</p>
+            <ProductGrid
+              produtos={produtos}
+              classeAtiva={etapa.modo === "producao" ? "active:border-series-1 active:bg-series-1/10" : "active:border-series-2 active:bg-series-2/10"}
+              onSelecionar={selecionarProduto}
+            />
+          </div>
+        </div>
+      )}
 
       {etapa.tipo === "quantidade" && (
         <NumericKeypad
-          titulo={modo === "producao" ? "Quantidade produzida" : "Quantidade perdida"}
+          titulo={etapa.modo === "producao" ? "Quantos foram produzidos?" : "Quantos foram perdidos?"}
           subtitulo={etapa.produto.nome}
-          corDestaque={modo === "producao" ? "bg-series-1" : "bg-status-critical"}
+          corDestaque={etapa.modo === "producao" ? "bg-series-1" : "bg-series-2"}
+          erro={erro}
+          enviando={enviando}
           onConfirmar={confirmarQuantidade}
-          onCancelar={() => setEtapa({ tipo: "idle" })}
+          onCancelar={() => setEtapa({ tipo: "produto", modo: etapa.modo })}
         />
       )}
 
       {etapa.tipo === "motivo" && (
         <MotivoPicker
+          produtoNome={etapa.produto.nome}
+          quantidade={etapa.quantidade}
           motivos={motivos}
+          erro={erro}
+          enviando={enviando}
           onSelecionar={confirmarMotivo}
-          onCancelar={() => setEtapa({ tipo: "idle" })}
+          onCancelar={() => setEtapa({ tipo: "quantidade", modo: "perda", produto: etapa.produto })}
         />
       )}
 
-      {toast && <ConfirmToast mensagem={toast.mensagem} tipo={toast.tipo} />}
+      {etapa.tipo === "sucesso" && (
+        <SuccessScreen
+          tipo={etapa.modo}
+          produtoNome={etapa.produtoNome}
+          quantidade={etapa.quantidade}
+          turnoNome={etapa.turnoNome}
+          data={etapa.data}
+          motivoNome={etapa.motivoNome}
+          custoTotalCentavos={etapa.custoTotalCentavos}
+          onNovoLancamento={irParaHome}
+        />
+      )}
     </div>
   );
 }

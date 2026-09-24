@@ -22,10 +22,10 @@ export function ProductGrid({ produtos, classeAtiva, onSelecionar }: ProductGrid
           key={produto.id}
           type="button"
           onClick={() => onSelecionar(produto)}
-          className={`flex h-28 flex-col items-center justify-center rounded-2xl border border-grid bg-surface px-2 text-center shadow-sm active:scale-95 ${classeAtiva}`}
+          className={`flex h-32 flex-col items-center justify-center rounded-2xl border border-grid bg-surface px-2 text-center shadow-sm transition-transform active:scale-95 ${classeAtiva}`}
         >
-          <span className="text-base font-semibold text-ink-primary">{produto.nome}</span>
-          <span className="mt-1 text-xs text-ink-muted">{produto.categoria}</span>
+          <span className="text-lg font-semibold text-ink-primary">{produto.nome}</span>
+          {produto.categoria && <span className="mt-1 text-xs text-ink-muted">{produto.categoria}</span>}
         </button>
       ))}
     </div>
