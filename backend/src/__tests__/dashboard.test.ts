@@ -1,41 +1,34 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import request from "supertest";
-import { createApp } from "../app";
-import { obterTokenAdmin } from "./helpers";
+import { obterTokenAdmin, req } from "./helpers";
 
-const app = createApp();
 let token: string;
 let produtoId: number;
 let turnoT1Id: number;
 let motivoId: number;
 
 beforeAll(async () => {
-  token = await obterTokenAdmin(app);
-  const produtos = await request(app).get("/api/produtos?ativos=true");
+  token = await obterTokenAdmin();
+  const produtos = await req("GET", "/api/produtos?ativos=true");
   produtoId = produtos.body.find((p: { nome: string }) => p.nome === "Mini Pão de Queijo").id;
-  const turnos = await request(app).get("/api/turnos");
+  const turnos = await req("GET", "/api/turnos");
   turnoT1Id = turnos.body.find((t: { codigo: string }) => t.codigo === "T1").id;
-  const motivos = await request(app).get("/api/motivos");
+  const motivos = await req("GET", "/api/motivos");
   motivoId = motivos.body[0].id;
 });
 
 describe("dashboard analítico", () => {
   it("exige autenticação", async () => {
-    const resposta = await request(app).get("/api/dashboard/analitico?dataInicio=2026-09-01&dataFim=2026-09-30");
+    const resposta = await req("GET", "/api/dashboard/analitico?dataInicio=2026-09-01&dataFim=2026-09-30");
     expect(resposta.status).toBe(401);
   });
 
   it("agrega produção e perda por produto dentro do período informado", async () => {
-    await request(app)
-      .post("/api/producoes")
-      .send({ produtoId, turnoId: turnoT1Id, data: "2026-09-10", quantidade: 100 });
-    await request(app)
-      .post("/api/perdas")
-      .send({ produtoId, turnoId: turnoT1Id, motivoId, data: "2026-09-10", quantidade: 15 });
+    await req("POST", "/api/producoes", { body: { produtoId, turnoId: turnoT1Id, data: "2026-09-10", quantidade: 100 } });
+    await req("POST", "/api/perdas", {
+      body: { produtoId, turnoId: turnoT1Id, motivoId, data: "2026-09-10", quantidade: 15 },
+    });
 
-    const resposta = await request(app)
-      .get("/api/dashboard/analitico?dataInicio=2026-09-10&dataFim=2026-09-10")
-      .set("Authorization", `Bearer ${token}`);
+    const resposta = await req("GET", "/api/dashboard/analitico?dataInicio=2026-09-10&dataFim=2026-09-10", { token });
 
     expect(resposta.status).toBe(200);
     expect(Array.isArray(resposta.body.motivos)).toBe(true);

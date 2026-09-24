@@ -1,18 +1,15 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import request from "supertest";
-import { createApp } from "../app";
-import { obterTokenAdmin } from "./helpers";
+import { obterTokenAdmin, req } from "./helpers";
 
-const app = createApp();
 let token: string;
 
 beforeAll(async () => {
-  token = await obterTokenAdmin(app);
+  token = await obterTokenAdmin();
 });
 
 describe("produtos oficiais", () => {
   it("lista exatamente os 7 produtos oficiais ativos, com os custos corretos", async () => {
-    const resposta = await request(app).get("/api/produtos?ativos=true");
+    const resposta = await req("GET", "/api/produtos?ativos=true");
     expect(resposta.status).toBe(200);
 
     const nomes: string[] = resposta.body.map((p: { nome: string }) => p.nome).sort();
@@ -41,7 +38,7 @@ describe("produtos oficiais", () => {
   });
 
   it("produtos fora da lista oficial não aparecem como ativos", async () => {
-    const resposta = await request(app).get("/api/produtos?ativos=true");
+    const resposta = await req("GET", "/api/produtos?ativos=true");
     const nomes = resposta.body.map((p: { nome: string }) => p.nome);
     expect(nomes).not.toContain("Coxinha");
     expect(nomes).not.toContain("Risoles");
@@ -50,41 +47,36 @@ describe("produtos oficiais", () => {
   });
 
   it("admin autenticado pode alterar o custo de um produto", async () => {
-    const listagem = await request(app).get("/api/produtos?ativos=true");
+    const listagem = await req("GET", "/api/produtos?ativos=true");
     const palito = listagem.body.find((p: { nome: string }) => p.nome === "Palito");
 
-    const resposta = await request(app)
-      .put(`/api/produtos/${palito.id}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ custoUnitarioCentavos: 300 });
+    const resposta = await req("PUT", `/api/produtos/${palito.id}`, {
+      token,
+      body: { custoUnitarioCentavos: 300 },
+    });
 
     expect(resposta.status).toBe(200);
     expect(resposta.body.custoUnitarioCentavos).toBe(300);
 
-    await request(app)
-      .put(`/api/produtos/${palito.id}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ custoUnitarioCentavos: 268 });
+    await req("PUT", `/api/produtos/${palito.id}`, { token, body: { custoUnitarioCentavos: 268 } });
   });
 
   it("admin autenticado pode desativar um produto (soft delete)", async () => {
-    const criado = await request(app)
-      .post("/api/produtos")
-      .set("Authorization", `Bearer ${token}`)
-      .send({ nome: "Produto Teste Desativação", unidade: "un", custoUnitarioCentavos: 100 });
+    const criado = await req("POST", "/api/produtos", {
+      token,
+      body: { nome: "Produto Teste Desativação", unidade: "un", custoUnitarioCentavos: 100 },
+    });
     expect(criado.status).toBe(201);
 
-    const resposta = await request(app)
-      .delete(`/api/produtos/${criado.body.id}`)
-      .set("Authorization", `Bearer ${token}`);
+    const resposta = await req("DELETE", `/api/produtos/${criado.body.id}`, { token });
     expect(resposta.status).toBe(200);
     expect(resposta.body.ativo).toBe(false);
   });
 
   it("gerenciamento de produtos exige autenticação administrativa", async () => {
-    const semAuth = await request(app)
-      .post("/api/produtos")
-      .send({ nome: "Sem Auth", unidade: "un", custoUnitarioCentavos: 100 });
+    const semAuth = await req("POST", "/api/produtos", {
+      body: { nome: "Sem Auth", unidade: "un", custoUnitarioCentavos: 100 },
+    });
     expect(semAuth.status).toBe(401);
   });
 });

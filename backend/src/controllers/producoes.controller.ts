@@ -1,6 +1,5 @@
-import { Request, Response } from "express";
+import type { ReqCompat as Request, ResCompat as Response } from "../lib/honoAdapter";
 import { z } from "zod";
-import { supabase } from "../db/supabase";
 import { HttpError } from "../middleware/errorHandler";
 import { RequestComAdmin } from "../middleware/auth";
 import { resolverIntervaloDatas } from "../utils/dateRange";
@@ -22,7 +21,7 @@ export async function listarProducoes(req: Request, res: Response) {
   const { dataInicio, dataFim, produtoId, turnoId } = req.query as Record<string, string | undefined>;
   const { inicio, fim } = resolverIntervaloDatas(dataInicio, dataFim);
 
-  let query = supabase
+  let query = req.supabase
     .from("producoes")
     .select(PRODUCAO_SELECT)
     .gte("data", inicio)
@@ -42,7 +41,7 @@ export async function listarProducoes(req: Request, res: Response) {
 export async function registrarProducao(req: Request, res: Response) {
   const dados = producaoSchema.parse(req.body);
 
-  const { data: produto, error: produtoError } = await supabase
+  const { data: produto, error: produtoError } = await req.supabase
     .from("produtos")
     .select("id")
     .eq("id", dados.produtoId)
@@ -50,7 +49,7 @@ export async function registrarProducao(req: Request, res: Response) {
   if (produtoError) throw new HttpError(500, produtoError.message);
   if (!produto) throw new HttpError(404, "Produto não encontrado");
 
-  const { data: turno, error: turnoError } = await supabase
+  const { data: turno, error: turnoError } = await req.supabase
     .from("turnos")
     .select("id")
     .eq("id", dados.turnoId)
@@ -58,7 +57,7 @@ export async function registrarProducao(req: Request, res: Response) {
   if (turnoError) throw new HttpError(500, turnoError.message);
   if (!turno) throw new HttpError(404, "Turno não encontrado");
 
-  const { data, error } = await supabase
+  const { data, error } = await req.supabase
     .from("producoes")
     .insert({ produto_id: dados.produtoId, turno_id: dados.turnoId, data: dados.data, quantidade: dados.quantidade })
     .select(PRODUCAO_SELECT)
@@ -72,7 +71,7 @@ export async function atualizarProducao(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
   const dados = producaoUpdateSchema.parse(req.body);
 
-  const { data: existenteRow, error: existenteError } = await supabase
+  const { data: existenteRow, error: existenteError } = await req.supabase
     .from("producoes")
     .select(PRODUCAO_SELECT)
     .eq("id", id)
@@ -82,12 +81,12 @@ export async function atualizarProducao(req: RequestComAdmin, res: Response) {
   const existente = mapProducao(existenteRow as unknown as ProducaoRow);
 
   if (dados.produtoId !== undefined) {
-    const { data: produto, error } = await supabase.from("produtos").select("id").eq("id", dados.produtoId).maybeSingle();
+    const { data: produto, error } = await req.supabase.from("produtos").select("id").eq("id", dados.produtoId).maybeSingle();
     if (error) throw new HttpError(500, error.message);
     if (!produto) throw new HttpError(404, "Produto não encontrado");
   }
   if (dados.turnoId !== undefined) {
-    const { data: turno, error } = await supabase.from("turnos").select("id").eq("id", dados.turnoId).maybeSingle();
+    const { data: turno, error } = await req.supabase.from("turnos").select("id").eq("id", dados.turnoId).maybeSingle();
     if (error) throw new HttpError(500, error.message);
     if (!turno) throw new HttpError(404, "Turno não encontrado");
   }
@@ -98,7 +97,7 @@ export async function atualizarProducao(req: RequestComAdmin, res: Response) {
   if (dados.data !== undefined) patch.data = dados.data;
   if (dados.quantidade !== undefined) patch.quantidade = dados.quantidade;
 
-  const { data, error } = await supabase.from("producoes").update(patch).eq("id", id).select(PRODUCAO_SELECT).single();
+  const { data, error } = await req.supabase.from("producoes").update(patch).eq("id", id).select(PRODUCAO_SELECT).single();
   if (error) throw new HttpError(400, error.message);
   const producao = mapProducao(data as unknown as ProducaoRow);
 
@@ -117,7 +116,7 @@ export async function atualizarProducao(req: RequestComAdmin, res: Response) {
   }
 
   if (alteracoes.length > 0) {
-    await registrarAuditoria({
+    await registrarAuditoria(req.supabase, {
       administrador: req.adminId ?? "ADMIN",
       entidade: "Producao",
       entidadeId: id,
@@ -132,7 +131,7 @@ export async function atualizarProducao(req: RequestComAdmin, res: Response) {
 export async function removerProducao(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
 
-  const { data: existenteRow, error: existenteError } = await supabase
+  const { data: existenteRow, error: existenteError } = await req.supabase
     .from("producoes")
     .select(PRODUCAO_SELECT)
     .eq("id", id)
@@ -141,10 +140,10 @@ export async function removerProducao(req: RequestComAdmin, res: Response) {
   if (!existenteRow) throw new HttpError(404, "Lançamento não encontrado");
   const existente = mapProducao(existenteRow as unknown as ProducaoRow);
 
-  const { error } = await supabase.from("producoes").delete().eq("id", id);
+  const { error } = await req.supabase.from("producoes").delete().eq("id", id);
   if (error) throw new HttpError(400, error.message);
 
-  await registrarAuditoria({
+  await registrarAuditoria(req.supabase, {
     administrador: req.adminId ?? "ADMIN",
     entidade: "Producao",
     entidadeId: id,

@@ -1,18 +1,44 @@
-import cors from "cors";
-import express from "express";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { ZodError } from "zod";
 import router from "./routes";
-import { errorHandler } from "./middleware/errorHandler";
+import { HttpError } from "./middleware/errorHandler";
+import type { Bindings, Env } from "./types/env";
 
 export function createApp() {
-  const app = express();
+  const app = new Hono<Bindings>();
 
-  app.use(cors({ origin: process.env.CORS_ORIGIN ?? "*" }));
-  app.use(express.json());
+  app.use(
+    "*",
+    cors({
+      origin: (_origin, c) => (c.env as Env).CORS_ORIGIN ?? "*",
+    })
+  );
 
-  app.get("/health", (_req, res) => res.json({ status: "ok" }));
-  app.use("/api", router);
+  app.get("/health", (c) => c.json({ status: "ok" }));
+  app.route("/api", router);
 
-  app.use(errorHandler);
+  app.onError((err, c) => {
+    if (err instanceof ZodError) {
+      return c.json(
+        {
+          error: "Dados inválidos",
+          detalhes: err.issues.map((issue) => ({
+            campo: issue.path.join("."),
+            mensagem: issue.message,
+          })),
+        },
+        400
+      );
+    }
+
+    if (err instanceof HttpError) {
+      return c.json({ error: err.message }, err.status as any);
+    }
+
+    console.error(err);
+    return c.json({ error: "Erro interno do servidor" }, 500);
+  });
 
   return app;
 }

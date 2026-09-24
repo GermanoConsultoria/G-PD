@@ -1,15 +1,23 @@
 {
-  // Configuração versionada do Worker "g-pd" (Cloudflare Workers static assets).
-  // Publica o build de produção do frontend (frontend/dist, gerado por
-  // "vite build"), nunca os arquivos-fonte crus. Sem isso, o Cloudflare
-  // publicava frontend/index.html sem processar (tela em branco), porque
-  // referencia /src/main.tsx — que só funciona no servidor de dev do Vite.
+  // Configuração versionada do Worker "g-pd" (Cloudflare Workers).
+  // Um único Worker serve tanto a API (backend/src/worker.ts, Hono) quanto o
+  // build de produção do frontend (frontend/dist, gerado por "vite build" —
+  // nunca os arquivos-fonte crus, senão o index.html referencia
+  // /src/main.tsx, que só funciona no servidor de dev do Vite).
   "name": "g-pd",
   "compatibility_date": "2026-09-24",
+  "main": "backend/src/worker.ts",
   "assets": {
     "directory": "./frontend/dist",
-    // Roteamento client-side (react-router): /dashboard, /login, etc.
-    // precisam cair no index.html em vez de 404 ao navegar direto pra URL.
-    "not_found_handling": "single-page-application"
+    // Fallback do próprio Cloudflare para rotas client-side do react-router
+    // (/dashboard, /login, etc.) quando não batem com nenhum arquivo. O
+    // worker.ts também trata isso explicitamente — dupla proteção.
+    "not_found_handling": "single-page-application",
+    // Necessário quando o Worker tem "main": diz ao runtime para expor os
+    // assets ao código via env.ASSETS, em vez de servi-los sozinho.
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
   }
 }

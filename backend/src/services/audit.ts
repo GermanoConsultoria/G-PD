@@ -1,4 +1,4 @@
-import { supabase } from "../db/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type AcaoAuditoria = "CRIACAO" | "EDICAO" | "EXCLUSAO";
 
@@ -32,11 +32,14 @@ function serializar(valor: unknown): string | null {
  * valorNovo/valorAnterior respectivamente — essencial para EXCLUSAO, ja que
  * o sistema usa exclusao fisica e a linha original deixara de existir.
  */
-export async function registrarAuditoria(params: RegistrarAuditoriaParams): Promise<void> {
+export async function registrarAuditoria(
+  client: SupabaseClient<any, string, any>,
+  params: RegistrarAuditoriaParams
+): Promise<void> {
   const { administrador, entidade, entidadeId, acao, alteracoes, snapshot } = params;
 
   if (alteracoes && alteracoes.length > 0) {
-    const { error } = await supabase.from("audit_logs").insert(
+    const { error } = await client.from("audit_logs").insert(
       alteracoes.map((alteracao) => ({
         administrador,
         entidade,
@@ -51,7 +54,7 @@ export async function registrarAuditoria(params: RegistrarAuditoriaParams): Prom
     return;
   }
 
-  const { error } = await supabase.from("audit_logs").insert({
+  const { error } = await client.from("audit_logs").insert({
     administrador,
     entidade,
     entidade_id: entidadeId,

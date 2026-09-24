@@ -1,6 +1,5 @@
-import { Request, Response } from "express";
+import type { ReqCompat as Request, ResCompat as Response } from "../lib/honoAdapter";
 import { z } from "zod";
-import { supabase } from "../db/supabase";
 import { HttpError } from "../middleware/errorHandler";
 import { RequestComAdmin } from "../middleware/auth";
 import { resolverIntervaloDatas } from "../utils/dateRange";
@@ -23,7 +22,7 @@ export async function listarPerdas(req: Request, res: Response) {
   const { dataInicio, dataFim, produtoId, turnoId, motivoId } = req.query as Record<string, string | undefined>;
   const { inicio, fim } = resolverIntervaloDatas(dataInicio, dataFim);
 
-  let query = supabase
+  let query = req.supabase
     .from("perdas")
     .select(PERDA_SELECT)
     .gte("data", inicio)
@@ -44,7 +43,7 @@ export async function listarPerdas(req: Request, res: Response) {
 export async function registrarPerda(req: Request, res: Response) {
   const dados = perdaSchema.parse(req.body);
 
-  const { data: produtoRow, error: produtoError } = await supabase
+  const { data: produtoRow, error: produtoError } = await req.supabase
     .from("produtos")
     .select("*")
     .eq("id", dados.produtoId)
@@ -53,7 +52,7 @@ export async function registrarPerda(req: Request, res: Response) {
   if (!produtoRow) throw new HttpError(404, "Produto não encontrado");
   const produto = mapProduto(produtoRow as ProdutoRow);
 
-  const { data: turno, error: turnoError } = await supabase
+  const { data: turno, error: turnoError } = await req.supabase
     .from("turnos")
     .select("id")
     .eq("id", dados.turnoId)
@@ -61,7 +60,7 @@ export async function registrarPerda(req: Request, res: Response) {
   if (turnoError) throw new HttpError(500, turnoError.message);
   if (!turno) throw new HttpError(404, "Turno não encontrado");
 
-  const { data: motivo, error: motivoError } = await supabase
+  const { data: motivo, error: motivoError } = await req.supabase
     .from("motivos_perda")
     .select("id")
     .eq("id", dados.motivoId)
@@ -75,7 +74,7 @@ export async function registrarPerda(req: Request, res: Response) {
   const custoUnitarioHistoricoCentavos = produto.custoUnitarioCentavos;
   const custoTotalCentavos = custoUnitarioHistoricoCentavos * dados.quantidade;
 
-  const { data, error } = await supabase
+  const { data, error } = await req.supabase
     .from("perdas")
     .insert({
       produto_id: dados.produtoId,
@@ -97,7 +96,7 @@ export async function atualizarPerda(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
   const dados = perdaUpdateSchema.parse(req.body);
 
-  const { data: existenteRow, error: existenteError } = await supabase
+  const { data: existenteRow, error: existenteError } = await req.supabase
     .from("perdas")
     .select(PERDA_SELECT)
     .eq("id", id)
@@ -110,7 +109,7 @@ export async function atualizarPerda(req: RequestComAdmin, res: Response) {
 
   let novoProduto: ReturnType<typeof mapProduto> | null = null;
   if (produtoMudou) {
-    const { data: produtoRow, error } = await supabase
+    const { data: produtoRow, error } = await req.supabase
       .from("produtos")
       .select("*")
       .eq("id", dados.produtoId)
@@ -120,12 +119,12 @@ export async function atualizarPerda(req: RequestComAdmin, res: Response) {
     novoProduto = mapProduto(produtoRow as ProdutoRow);
   }
   if (dados.turnoId !== undefined) {
-    const { data: turno, error } = await supabase.from("turnos").select("id").eq("id", dados.turnoId).maybeSingle();
+    const { data: turno, error } = await req.supabase.from("turnos").select("id").eq("id", dados.turnoId).maybeSingle();
     if (error) throw new HttpError(500, error.message);
     if (!turno) throw new HttpError(404, "Turno não encontrado");
   }
   if (dados.motivoId !== undefined) {
-    const { data: motivo, error } = await supabase
+    const { data: motivo, error } = await req.supabase
       .from("motivos_perda")
       .select("id")
       .eq("id", dados.motivoId)
@@ -154,7 +153,7 @@ export async function atualizarPerda(req: RequestComAdmin, res: Response) {
   if (dados.motivoId !== undefined) patch.motivo_id = dados.motivoId;
   if (dados.data !== undefined) patch.data = dados.data;
 
-  const { data, error } = await supabase.from("perdas").update(patch).eq("id", id).select(PERDA_SELECT).single();
+  const { data, error } = await req.supabase.from("perdas").update(patch).eq("id", id).select(PERDA_SELECT).single();
   if (error) throw new HttpError(400, error.message);
   const perda = mapPerda(data as unknown as PerdaRow);
 
@@ -190,7 +189,7 @@ export async function atualizarPerda(req: RequestComAdmin, res: Response) {
   }
 
   if (alteracoes.length > 0) {
-    await registrarAuditoria({
+    await registrarAuditoria(req.supabase, {
       administrador: req.adminId ?? "ADMIN",
       entidade: "Perda",
       entidadeId: id,
@@ -205,7 +204,7 @@ export async function atualizarPerda(req: RequestComAdmin, res: Response) {
 export async function removerPerda(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
 
-  const { data: existenteRow, error: existenteError } = await supabase
+  const { data: existenteRow, error: existenteError } = await req.supabase
     .from("perdas")
     .select(PERDA_SELECT)
     .eq("id", id)
@@ -214,10 +213,10 @@ export async function removerPerda(req: RequestComAdmin, res: Response) {
   if (!existenteRow) throw new HttpError(404, "Lançamento não encontrado");
   const existente = mapPerda(existenteRow as unknown as PerdaRow);
 
-  const { error } = await supabase.from("perdas").delete().eq("id", id);
+  const { error } = await req.supabase.from("perdas").delete().eq("id", id);
   if (error) throw new HttpError(400, error.message);
 
-  await registrarAuditoria({
+  await registrarAuditoria(req.supabase, {
     administrador: req.adminId ?? "ADMIN",
     entidade: "Perda",
     entidadeId: id,

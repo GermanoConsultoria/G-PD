@@ -1,19 +1,17 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
     "lib": ["ES2022"],
-    "outDir": "dist",
-    "rootDir": "src",
+    "types": ["@cloudflare/workers-types"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false,
-    "sourceMap": true
+    "noEmit": true
   },
   "include": ["src"],
-  "exclude": ["src/__tests__"]
+  "exclude": ["src/__tests__", "src/scripts"]
 }

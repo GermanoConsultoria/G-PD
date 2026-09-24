@@ -1,6 +1,5 @@
-import { Response } from "express";
+import type { ResCompat as Response } from "../lib/honoAdapter";
 import { z } from "zod";
-import { supabase } from "../db/supabase";
 import { HttpError } from "../middleware/errorHandler";
 import { RequestComAdmin } from "../middleware/auth";
 import { registrarAuditoria } from "../services/audit";
@@ -21,7 +20,7 @@ function tratarErroEscrita(error: { code?: string; message: string }): never {
 
 export async function listarProdutos(req: RequestComAdmin, res: Response) {
   const somenteAtivos = req.query.ativos === "true";
-  let query = supabase.from("produtos").select("*").order("nome", { ascending: true });
+  let query = req.supabase.from("produtos").select("*").order("nome", { ascending: true });
   if (somenteAtivos) query = query.eq("ativo", true);
 
   const { data, error } = await query;
@@ -32,7 +31,7 @@ export async function listarProdutos(req: RequestComAdmin, res: Response) {
 
 export async function obterProduto(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
-  const { data, error } = await supabase.from("produtos").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await req.supabase.from("produtos").select("*").eq("id", id).maybeSingle();
   if (error) throw new HttpError(500, error.message);
   if (!data) throw new HttpError(404, "Produto não encontrado");
   res.json(mapProduto(data as ProdutoRow));
@@ -41,7 +40,7 @@ export async function obterProduto(req: RequestComAdmin, res: Response) {
 export async function criarProduto(req: RequestComAdmin, res: Response) {
   const dados = produtoSchema.parse(req.body);
 
-  const { data, error } = await supabase
+  const { data, error } = await req.supabase
     .from("produtos")
     .insert({
       nome: dados.nome,
@@ -56,7 +55,7 @@ export async function criarProduto(req: RequestComAdmin, res: Response) {
 
   const produto = mapProduto(data as ProdutoRow);
 
-  await registrarAuditoria({
+  await registrarAuditoria(req.supabase, {
     administrador: req.adminId ?? "ADMIN",
     entidade: "Produto",
     entidadeId: produto.id,
@@ -71,7 +70,7 @@ export async function atualizarProduto(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
   const dados = produtoSchema.partial().parse(req.body);
 
-  const { data: existenteRow, error: existenteError } = await supabase
+  const { data: existenteRow, error: existenteError } = await req.supabase
     .from("produtos")
     .select("*")
     .eq("id", id)
@@ -89,7 +88,7 @@ export async function atualizarProduto(req: RequestComAdmin, res: Response) {
   if (dados.custoUnitarioCentavos !== undefined) patch.custo_unitario_centavos = dados.custoUnitarioCentavos;
   if (dados.ativo !== undefined) patch.ativo = dados.ativo;
 
-  const { data, error } = await supabase.from("produtos").update(patch).eq("id", id).select().single();
+  const { data, error } = await req.supabase.from("produtos").update(patch).eq("id", id).select().single();
   if (error) tratarErroEscrita(error);
   const produto = mapProduto(data as ProdutoRow);
 
@@ -99,7 +98,7 @@ export async function atualizarProduto(req: RequestComAdmin, res: Response) {
     .map((campo) => ({ campo, valorAnterior: existente[campo], valorNovo: produto[campo] }));
 
   if (alteracoes.length > 0) {
-    await registrarAuditoria({
+    await registrarAuditoria(req.supabase, {
       administrador: req.adminId ?? "ADMIN",
       entidade: "Produto",
       entidadeId: id,
@@ -114,7 +113,7 @@ export async function atualizarProduto(req: RequestComAdmin, res: Response) {
 export async function removerProduto(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
 
-  const { data: existenteRow, error: existenteError } = await supabase
+  const { data: existenteRow, error: existenteError } = await req.supabase
     .from("produtos")
     .select("*")
     .eq("id", id)
@@ -124,12 +123,12 @@ export async function removerProduto(req: RequestComAdmin, res: Response) {
   const existente = mapProduto(existenteRow as ProdutoRow);
 
   // Soft delete: preserva histórico de produções/perdas vinculadas ao produto.
-  const { data, error } = await supabase.from("produtos").update({ ativo: false }).eq("id", id).select().single();
+  const { data, error } = await req.supabase.from("produtos").update({ ativo: false }).eq("id", id).select().single();
   if (error) throw new HttpError(400, error.message);
   const produto = mapProduto(data as ProdutoRow);
 
   if (existente.ativo !== produto.ativo) {
-    await registrarAuditoria({
+    await registrarAuditoria(req.supabase, {
       administrador: req.adminId ?? "ADMIN",
       entidade: "Produto",
       entidadeId: id,

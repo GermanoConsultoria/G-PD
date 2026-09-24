@@ -1,6 +1,7 @@
-import { Router } from "express";
-import { asyncHandler } from "../middleware/errorHandler";
+import { Hono } from "hono";
+import type { Bindings } from "../types/env";
 import { requireAdmin } from "../middleware/auth";
+import { honoHandler } from "../lib/honoAdapter";
 import {
   atualizarProduto,
   criarProduto,
@@ -9,15 +10,15 @@ import {
   removerProduto,
 } from "../controllers/produtos.controller";
 
-const router = Router();
+const router = new Hono<Bindings>();
 
 // Listagem publica: o tablet le os produtos ativos para montar a grade de
 // lançamento e não deve exigir autenticação administrativa.
-router.get("/", asyncHandler(listarProdutos));
+router.get("/", honoHandler(listarProdutos));
 
-router.get("/:id", requireAdmin, asyncHandler(obterProduto));
-router.post("/", requireAdmin, asyncHandler(criarProduto));
-router.put("/:id", requireAdmin, asyncHandler(atualizarProduto));
-router.delete("/:id", requireAdmin, asyncHandler(removerProduto));
+router.get("/:id", requireAdmin, honoHandler(obterProduto));
+router.post("/", requireAdmin, honoHandler(criarProduto));
+router.put("/:id", requireAdmin, honoHandler(atualizarProduto));
+router.delete("/:id", requireAdmin, honoHandler(removerProduto));
 
 export default router;

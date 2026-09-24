@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import request from "supertest";
-import { createApp } from "../app";
-
-const app = createApp();
+import { req } from "./helpers";
 
 describe("GET /api/contexto-atual", () => {
   afterEach(() => {
@@ -13,7 +10,7 @@ describe("GET /api/contexto-atual", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 0, 1, 2, 0, 0));
 
-    const resposta = await request(app).get("/api/contexto-atual");
+    const resposta = await req("GET", "/api/contexto-atual");
     expect(resposta.status).toBe(200);
     expect(resposta.body.emHorarioOperacional).toBe(false);
     expect(resposta.body.turno).toBeNull();
@@ -23,7 +20,7 @@ describe("GET /api/contexto-atual", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 0, 1, 8, 0, 0));
 
-    const resposta = await request(app).get("/api/contexto-atual");
+    const resposta = await req("GET", "/api/contexto-atual");
     expect(resposta.status).toBe(200);
     expect(resposta.body.emHorarioOperacional).toBe(true);
     expect(resposta.body.turno.codigo).toBe("T1");
@@ -33,7 +30,7 @@ describe("GET /api/contexto-atual", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 0, 1, 15, 0, 0));
 
-    const resposta = await request(app).get("/api/contexto-atual");
+    const resposta = await req("GET", "/api/contexto-atual");
     expect(resposta.status).toBe(200);
     expect(resposta.body.emHorarioOperacional).toBe(true);
     expect(resposta.body.turno.codigo).toBe("T2");

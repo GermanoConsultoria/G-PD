@@ -1,6 +1,7 @@
-import { Router } from "express";
-import { asyncHandler } from "../middleware/errorHandler";
+import { Hono } from "hono";
+import type { Bindings } from "../types/env";
 import { requireAdmin } from "../middleware/auth";
+import { honoHandler } from "../lib/honoAdapter";
 import {
   analitico,
   evolucaoPerdas,
@@ -9,14 +10,14 @@ import {
   resumo,
 } from "../controllers/dashboard.controller";
 
-const router = Router();
+const router = new Hono<Bindings>();
 
 router.use(requireAdmin);
 
-router.get("/resumo", asyncHandler(resumo));
-router.get("/perdas-por-motivo", asyncHandler(perdasPorMotivo));
-router.get("/perdas-por-produto", asyncHandler(perdasPorProduto));
-router.get("/evolucao-perdas", asyncHandler(evolucaoPerdas));
-router.get("/analitico", asyncHandler(analitico));
+router.get("/resumo", honoHandler(resumo));
+router.get("/perdas-por-motivo", honoHandler(perdasPorMotivo));
+router.get("/perdas-por-produto", honoHandler(perdasPorProduto));
+router.get("/evolucao-perdas", honoHandler(evolucaoPerdas));
+router.get("/analitico", honoHandler(analitico));
 
 export default router;

@@ -1,15 +1,16 @@
-import { Router } from "express";
-import { asyncHandler } from "../middleware/errorHandler";
+import { Hono } from "hono";
+import type { Bindings } from "../types/env";
+import { honoHandler } from "../lib/honoAdapter";
 import {
   listarMotivos,
   listarTurnos,
   obterContextoAtual,
 } from "../controllers/referencia.controller";
 
-const router = Router();
+const router = new Hono<Bindings>();
 
-router.get("/turnos", asyncHandler(listarTurnos));
-router.get("/motivos", asyncHandler(listarMotivos));
-router.get("/contexto-atual", asyncHandler(obterContextoAtual));
+router.get("/turnos", honoHandler(listarTurnos));
+router.get("/motivos", honoHandler(listarMotivos));
+router.get("/contexto-atual", honoHandler(obterContextoAtual));
 
 export default router;

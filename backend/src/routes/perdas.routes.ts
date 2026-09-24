@@ -1,6 +1,7 @@
-import { Router } from "express";
-import { asyncHandler } from "../middleware/errorHandler";
+import { Hono } from "hono";
+import type { Bindings } from "../types/env";
 import { requireAdmin } from "../middleware/auth";
+import { honoHandler } from "../lib/honoAdapter";
 import {
   atualizarPerda,
   listarPerdas,
@@ -8,11 +9,11 @@ import {
   removerPerda,
 } from "../controllers/perdas.controller";
 
-const router = Router();
+const router = new Hono<Bindings>();
 
-router.get("/", requireAdmin, asyncHandler(listarPerdas));
-router.post("/", asyncHandler(registrarPerda));
-router.put("/:id", requireAdmin, asyncHandler(atualizarPerda));
-router.delete("/:id", requireAdmin, asyncHandler(removerPerda));
+router.get("/", requireAdmin, honoHandler(listarPerdas));
+router.post("/", honoHandler(registrarPerda));
+router.put("/:id", requireAdmin, honoHandler(atualizarPerda));
+router.delete("/:id", requireAdmin, honoHandler(removerPerda));
 
 export default router;

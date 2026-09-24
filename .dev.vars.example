@@ -1,0 +1,5 @@
+SUPABASE_URL="https://xxxxxxxxxxxx.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="troque-por-sua-service-role-key"
+ADMIN_PASSWORD="troque-esta-senha"
+JWT_SECRET="troque-este-segredo-tambem"
+CORS_ORIGIN="*"

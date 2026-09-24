@@ -1,9 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import request from "supertest";
-import { createApp } from "../app";
-import { obterTokenAdmin } from "./helpers";
+import { obterTokenAdmin, req } from "./helpers";
 
-const app = createApp();
 let token: string;
 let produtoTortaId: number;
 let produtoPalitoId: number;
@@ -11,21 +8,21 @@ let turnoT1Id: number;
 let motivoId: number;
 
 beforeAll(async () => {
-  token = await obterTokenAdmin(app);
-  const produtos = await request(app).get("/api/produtos?ativos=true");
+  token = await obterTokenAdmin();
+  const produtos = await req("GET", "/api/produtos?ativos=true");
   produtoTortaId = produtos.body.find((p: { nome: string }) => p.nome === "Torta").id;
   produtoPalitoId = produtos.body.find((p: { nome: string }) => p.nome === "Palito").id;
-  const turnos = await request(app).get("/api/turnos");
+  const turnos = await req("GET", "/api/turnos");
   turnoT1Id = turnos.body.find((t: { codigo: string }) => t.codigo === "T1").id;
-  const motivos = await request(app).get("/api/motivos");
+  const motivos = await req("GET", "/api/motivos");
   motivoId = motivos.body[0].id;
 });
 
 describe("perdas", () => {
   it("custo histórico é gravado a partir do custo vigente do produto ao criar", async () => {
-    const resposta = await request(app)
-      .post("/api/perdas")
-      .send({ produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-01", quantidade: 10 });
+    const resposta = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-01", quantidade: 10 },
+    });
 
     expect(resposta.status).toBe(201);
     expect(resposta.body.custoUnitarioHistoricoCentavos).toBe(581);
@@ -33,43 +30,34 @@ describe("perdas", () => {
   });
 
   it("alterar o custo do produto depois NÃO afeta perda já registrada (custo histórico)", async () => {
-    const criada = await request(app)
-      .post("/api/perdas")
-      .send({ produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-02", quantidade: 5 });
+    const criada = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-02", quantidade: 5 },
+    });
     const perdaId = criada.body.id;
     expect(criada.body.custoUnitarioHistoricoCentavos).toBe(581);
 
-    await request(app)
-      .put(`/api/produtos/${produtoTortaId}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ custoUnitarioCentavos: 700 });
+    await req("PUT", `/api/produtos/${produtoTortaId}`, { token, body: { custoUnitarioCentavos: 700 } });
 
-    const releitura = await request(app).get("/api/perdas").set("Authorization", `Bearer ${token}`);
+    const releitura = await req("GET", "/api/perdas", { token });
     const perdaAntiga = releitura.body.find((p: { id: number }) => p.id === perdaId);
     expect(perdaAntiga.custoUnitarioHistoricoCentavos).toBe(581);
     expect(perdaAntiga.custoTotalCentavos).toBe(2905);
 
-    await request(app)
-      .put(`/api/produtos/${produtoTortaId}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ custoUnitarioCentavos: 581 });
+    await req("PUT", `/api/produtos/${produtoTortaId}`, { token, body: { custoUnitarioCentavos: 581 } });
   });
 
   it("listagem sem autenticação é bloqueada", async () => {
-    const resposta = await request(app).get("/api/perdas");
+    const resposta = await req("GET", "/api/perdas");
     expect(resposta.status).toBe(401);
   });
 
   it("edição administrativa que só corrige a quantidade preserva o custo unitário histórico", async () => {
-    const criada = await request(app)
-      .post("/api/perdas")
-      .send({ produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-03", quantidade: 4 });
+    const criada = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-03", quantidade: 4 },
+    });
     const perdaId = criada.body.id;
 
-    const editada = await request(app)
-      .put(`/api/perdas/${perdaId}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ quantidade: 6 });
+    const editada = await req("PUT", `/api/perdas/${perdaId}`, { token, body: { quantidade: 6 } });
 
     expect(editada.status).toBe(200);
     expect(editada.body.custoUnitarioHistoricoCentavos).toBe(581);
@@ -77,24 +65,19 @@ describe("perdas", () => {
   });
 
   it("edição administrativa que troca o produto recalcula o custo histórico e audita a mudança", async () => {
-    const criada = await request(app)
-      .post("/api/perdas")
-      .send({ produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-04", quantidade: 3 });
+    const criada = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-04", quantidade: 3 },
+    });
     const perdaId = criada.body.id;
 
-    const editada = await request(app)
-      .put(`/api/perdas/${perdaId}`)
-      .set("Authorization", `Bearer ${token}`)
-      .send({ produtoId: produtoPalitoId });
+    const editada = await req("PUT", `/api/perdas/${perdaId}`, { token, body: { produtoId: produtoPalitoId } });
 
     expect(editada.status).toBe(200);
     expect(editada.body.produtoId).toBe(produtoPalitoId);
     expect(editada.body.custoUnitarioHistoricoCentavos).toBe(268);
     expect(editada.body.custoTotalCentavos).toBe(268 * 3);
 
-    const auditoria = await request(app)
-      .get(`/api/auditoria?entidade=Perda&entidadeId=${perdaId}`)
-      .set("Authorization", `Bearer ${token}`);
+    const auditoria = await req("GET", `/api/auditoria?entidade=Perda&entidadeId=${perdaId}`, { token });
     const campos = auditoria.body.map((log: { campo: string }) => log.campo);
     expect(campos).toContain("produtoId");
     expect(campos).toContain("custoUnitarioHistoricoCentavos");
@@ -102,17 +85,15 @@ describe("perdas", () => {
   });
 
   it("admin exclui perda e a auditoria preserva os dados do registro removido", async () => {
-    const criada = await request(app)
-      .post("/api/perdas")
-      .send({ produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-05", quantidade: 2 });
+    const criada = await req("POST", "/api/perdas", {
+      body: { produtoId: produtoTortaId, turnoId: turnoT1Id, motivoId, data: "2026-09-05", quantidade: 2 },
+    });
     const perdaId = criada.body.id;
 
-    const resposta = await request(app).delete(`/api/perdas/${perdaId}`).set("Authorization", `Bearer ${token}`);
+    const resposta = await req("DELETE", `/api/perdas/${perdaId}`, { token });
     expect(resposta.status).toBe(204);
 
-    const auditoria = await request(app)
-      .get(`/api/auditoria?entidade=Perda&entidadeId=${perdaId}`)
-      .set("Authorization", `Bearer ${token}`);
+    const auditoria = await req("GET", `/api/auditoria?entidade=Perda&entidadeId=${perdaId}`, { token });
     const exclusao = auditoria.body.find((log: { acao: string }) => log.acao === "EXCLUSAO");
     expect(exclusao).toBeTruthy();
     expect(exclusao.valorAnterior).toContain("Torta");

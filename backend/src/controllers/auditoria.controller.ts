@@ -1,12 +1,11 @@
-import { Request, Response } from "express";
-import { supabase } from "../db/supabase";
+import type { ReqCompat as Request, ResCompat as Response } from "../lib/honoAdapter";
 import { HttpError } from "../middleware/errorHandler";
 import { AuditLogRow, mapAuditLog } from "../db/mappers";
 
 export async function listarAuditoria(req: Request, res: Response) {
   const { entidade, entidadeId, dataInicio, dataFim } = req.query as Record<string, string | undefined>;
 
-  let query = supabase.from("audit_logs").select("*").order("criado_em", { ascending: false }).limit(500);
+  let query = req.supabase.from("audit_logs").select("*").order("criado_em", { ascending: false }).limit(500);
 
   if (entidade) query = query.eq("entidade", entidade);
   if (entidadeId) query = query.eq("entidade_id", Number(entidadeId));

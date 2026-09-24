@@ -1,5 +1,5 @@
-import { Request, Response } from "express";
-import { supabase } from "../db/supabase";
+import type { ReqCompat as Request, ResCompat as Response } from "../lib/honoAdapter";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { HttpError } from "../middleware/errorHandler";
 import { resolverIntervaloDatas } from "../utils/dateRange";
 import { ProdutoRow, mapProduto } from "../db/mappers";
@@ -29,7 +29,11 @@ interface PerdaAgregavel {
 // (sem GROUP BY em SQL — o client PostgREST/supabase-js não expõe agregação
 // nativa), o que é perfeitamente aceitável no volume de dados de uma
 // padaria/produção artesanal.
-async function buscarProducoesNoPeriodo(inicio: string, fim: string): Promise<ProducaoAgregavel[]> {
+async function buscarProducoesNoPeriodo(
+  supabase: SupabaseClient<any, string, any>,
+  inicio: string,
+  fim: string
+): Promise<ProducaoAgregavel[]> {
   const { data, error } = await supabase
     .from("producoes")
     .select("produto_id, quantidade")
@@ -39,7 +43,11 @@ async function buscarProducoesNoPeriodo(inicio: string, fim: string): Promise<Pr
   return data as ProducaoAgregavel[];
 }
 
-async function buscarPerdasNoPeriodo(inicio: string, fim: string): Promise<PerdaAgregavel[]> {
+async function buscarPerdasNoPeriodo(
+  supabase: SupabaseClient<any, string, any>,
+  inicio: string,
+  fim: string
+): Promise<PerdaAgregavel[]> {
   const { data, error } = await supabase
     .from("perdas")
     .select("produto_id, turno_id, motivo_id, data, quantidade, custo_total_centavos, produto:produtos(nome), motivo:motivos_perda(codigo, nome)")
@@ -51,7 +59,7 @@ async function buscarPerdasNoPeriodo(inicio: string, fim: string): Promise<Perda
 
 export async function resumo(req: Request, res: Response) {
   const { inicio, fim } = query(req);
-  const [producoes, perdas] = await Promise.all([buscarProducoesNoPeriodo(inicio, fim), buscarPerdasNoPeriodo(inicio, fim)]);
+  const [producoes, perdas] = await Promise.all([buscarProducoesNoPeriodo(req.supabase, inicio, fim), buscarPerdasNoPeriodo(req.supabase, inicio, fim)]);
 
   const totalProduzido = producoes.reduce((soma, p) => soma + p.quantidade, 0);
   const totalDescartado = perdas.reduce((soma, p) => soma + p.quantidade, 0);
@@ -63,7 +71,7 @@ export async function resumo(req: Request, res: Response) {
 
 export async function perdasPorMotivo(req: Request, res: Response) {
   const { inicio, fim } = query(req);
-  const perdas = await buscarPerdasNoPeriodo(inicio, fim);
+  const perdas = await buscarPerdasNoPeriodo(req.supabase, inicio, fim);
 
   const porMotivo = new Map<number, { motivoId: number; motivo: string; quantidade: number; custoTotalCentavos: number }>();
   for (const perda of perdas) {
@@ -83,7 +91,7 @@ export async function perdasPorMotivo(req: Request, res: Response) {
 
 export async function perdasPorProduto(req: Request, res: Response) {
   const { inicio, fim } = query(req);
-  const perdas = await buscarPerdasNoPeriodo(inicio, fim);
+  const perdas = await buscarPerdasNoPeriodo(req.supabase, inicio, fim);
 
   const porProduto = new Map<number, { produtoId: number; produto: string; quantidade: number; custoTotalCentavos: number }>();
   for (const perda of perdas) {
@@ -103,7 +111,7 @@ export async function perdasPorProduto(req: Request, res: Response) {
 
 export async function evolucaoPerdas(req: Request, res: Response) {
   const { inicio, fim } = query(req);
-  const perdas = await buscarPerdasNoPeriodo(inicio, fim);
+  const perdas = await buscarPerdasNoPeriodo(req.supabase, inicio, fim);
 
   const porData = new Map<string, { data: string; quantidade: number; custoTotalCentavos: number }>();
   for (const perda of perdas) {
@@ -125,10 +133,10 @@ export async function analitico(req: Request, res: Response) {
   const { inicio, fim } = query(req);
 
   const [producoes, perdas, produtosResp, motivosResp] = await Promise.all([
-    buscarProducoesNoPeriodo(inicio, fim),
-    buscarPerdasNoPeriodo(inicio, fim),
-    supabase.from("produtos").select("*"),
-    supabase.from("motivos_perda").select("*").order("id", { ascending: true }),
+    buscarProducoesNoPeriodo(req.supabase, inicio, fim),
+    buscarPerdasNoPeriodo(req.supabase, inicio, fim),
+    req.supabase.from("produtos").select("*"),
+    req.supabase.from("motivos_perda").select("*").order("id", { ascending: true }),
   ]);
 
   if (produtosResp.error) throw new HttpError(500, produtosResp.error.message);
