@@ -1,0 +1,15 @@
+{
+  // Configuração versionada do Worker "g-pd" (Cloudflare Workers static assets).
+  // Publica o build de produção do frontend (frontend/dist, gerado por
+  // "vite build"), nunca os arquivos-fonte crus. Sem isso, o Cloudflare
+  // publicava frontend/index.html sem processar (tela em branco), porque
+  // referencia /src/main.tsx — que só funciona no servidor de dev do Vite.
+  "name": "g-pd",
+  "compatibility_date": "2026-09-24",
+  "assets": {
+    "directory": "./frontend/dist",
+    // Roteamento client-side (react-router): /dashboard, /login, etc.
+    // precisam cair no index.html em vez de 404 ao navegar direto pra URL.
+    "not_found_handling": "single-page-application"
+  }
+}
