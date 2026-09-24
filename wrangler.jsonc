@@ -19,5 +19,15 @@
   },
   "observability": {
     "enabled": true
+  },
+  // Vars não sensíveis, versionadas de propósito: como não são "Secret", o
+  // Cloudflare Workers Builds SOBRESCREVE (limpa) qualquer valor cadastrado
+  // manualmente no painel a cada "wrangler deploy" que não as declare aqui.
+  // Segredos de verdade (ADMIN_PASSWORD, JWT_SECRET,
+  // SUPABASE_SERVICE_ROLE_KEY) continuam só no painel (Settings > Secrets),
+  // nunca neste arquivo.
+  "vars": {
+    "SUPABASE_URL": "https://ifbhsmpdokqjaxrxpfpa.supabase.co",
+    "CORS_ORIGIN": "https://g-pd.g-pd.workers.dev"
   }
 }
