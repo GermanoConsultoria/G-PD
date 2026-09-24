@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import {
+  getAnalitico,
   getEvolucaoPerdas,
   getPerdasPorMotivo,
   getPerdasPorProduto,
   getResumoDashboard,
 } from "../api/endpoints";
-import type { EvolucaoPerdaDia, PerdaPorMotivo, PerdaPorProduto, ResumoDashboard } from "../api/types";
+import type { AnaliticoResponse, EvolucaoPerdaDia, PerdaPorMotivo, PerdaPorProduto, ResumoDashboard } from "../api/types";
+import { AnaliticoTable } from "../components/dashboard/AnaliticoTable";
 import { DateRangeFilter } from "../components/dashboard/DateRangeFilter";
 import { KpiCard } from "../components/dashboard/KpiCard";
 import { RankingChart } from "../components/dashboard/RankingChart";
 import { TrendChart } from "../components/dashboard/TrendChart";
-import { formatarMoeda, formatarNumero, hojeISO, primeiroDiaDoMesISO } from "../utils/format";
+import { hojeISO, primeiroDiaDoMesISO, formatarNumero } from "../utils/format";
+import { formatarCentavos } from "../utils/money";
 
 export function Dashboard() {
   const [dataInicio, setDataInicio] = useState(primeiroDiaDoMesISO());
@@ -20,6 +23,7 @@ export function Dashboard() {
   const [porMotivo, setPorMotivo] = useState<PerdaPorMotivo[]>([]);
   const [porProduto, setPorProduto] = useState<PerdaPorProduto[]>([]);
   const [evolucao, setEvolucao] = useState<EvolucaoPerdaDia[]>([]);
+  const [analitico, setAnalitico] = useState<AnaliticoResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
@@ -30,12 +34,14 @@ export function Dashboard() {
       getPerdasPorMotivo(filtro),
       getPerdasPorProduto(filtro),
       getEvolucaoPerdas(filtro),
+      getAnalitico(filtro),
     ])
-      .then(([resumoResp, motivoResp, produtoResp, evolucaoResp]) => {
+      .then(([resumoResp, motivoResp, produtoResp, evolucaoResp, analiticoResp]) => {
         setResumo(resumoResp);
         setPorMotivo(motivoResp);
         setPorProduto(produtoResp);
         setEvolucao(evolucaoResp);
+        setAnalitico(analiticoResp);
       })
       .finally(() => setCarregando(false));
   }, [dataInicio, dataFim]);
@@ -62,24 +68,42 @@ export function Dashboard() {
             valor={`${(resumo?.taxaPerda ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`}
             destaque={(resumo?.taxaPerda ?? 0) >= 10 ? "critico" : "neutro"}
           />
-          <KpiCard titulo="Custo Total das Perdas" valor={formatarMoeda(resumo?.custoTotalPerdas ?? 0)} destaque="critico" />
+          <KpiCard
+            titulo="Custo Total das Perdas"
+            valor={formatarCentavos(resumo?.custoTotalPerdasCentavos ?? 0)}
+            destaque="critico"
+          />
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <RankingChart
             titulo="Perdas por Motivo"
             vazio="Sem perdas registradas no período."
-            itens={porMotivo.map((m) => ({ chave: m.motivoId, nome: m.motivo, quantidade: m.quantidade, custoTotal: m.custoTotal }))}
+            itens={porMotivo.map((m) => ({
+              chave: m.motivoId,
+              nome: m.motivo,
+              quantidade: m.quantidade,
+              custoTotalCentavos: m.custoTotalCentavos,
+            }))}
           />
           <RankingChart
             titulo="Perdas por Produto (ranking de desperdício)"
             vazio="Sem perdas registradas no período."
-            itens={porProduto.map((p) => ({ chave: p.produtoId, nome: p.produto, quantidade: p.quantidade, custoTotal: p.custoTotal }))}
+            itens={porProduto.map((p) => ({
+              chave: p.produtoId,
+              nome: p.produto,
+              quantidade: p.quantidade,
+              custoTotalCentavos: p.custoTotalCentavos,
+            }))}
           />
         </div>
 
         <div className="mt-4">
           <TrendChart dados={evolucao} />
+        </div>
+
+        <div className="mt-4">
+          <AnaliticoTable dados={analitico} />
         </div>
       </div>
     </div>

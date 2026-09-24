@@ -1,22 +1,34 @@
 import { Request, Response } from "express";
-import { prisma } from "../db/prisma";
+import { supabase } from "../db/supabase";
+import { HttpError } from "../middleware/errorHandler";
+import { MotivoRow, TurnoRow, mapMotivo, mapTurno } from "../db/mappers";
 import { dataAtualISO, detectarTurnoAtual } from "../utils/turno";
 
 export async function listarTurnos(_req: Request, res: Response) {
-  const turnos = await prisma.turno.findMany({ orderBy: { codigo: "asc" } });
-  res.json(turnos);
+  const { data, error } = await supabase.from("turnos").select("*").order("codigo", { ascending: true });
+  if (error) throw new HttpError(500, error.message);
+  res.json((data as TurnoRow[]).map(mapTurno));
 }
 
 export async function listarMotivos(_req: Request, res: Response) {
-  const motivos = await prisma.motivoPerda.findMany({
-    where: { ativo: true },
-    orderBy: { id: "asc" },
-  });
-  res.json(motivos);
+  const { data, error } = await supabase
+    .from("motivos_perda")
+    .select("*")
+    .eq("ativo", true)
+    .order("id", { ascending: true });
+  if (error) throw new HttpError(500, error.message);
+  res.json((data as MotivoRow[]).map(mapMotivo));
 }
 
 export async function obterContextoAtual(_req: Request, res: Response) {
-  const codigoTurno = detectarTurnoAtual();
-  const turno = await prisma.turno.findUnique({ where: { codigo: codigoTurno } });
-  res.json({ data: dataAtualISO(), turno });
+  const { emHorarioOperacional, codigoTurno } = detectarTurnoAtual();
+
+  if (!emHorarioOperacional || !codigoTurno) {
+    return res.json({ data: dataAtualISO(), emHorarioOperacional: false, turno: null });
+  }
+
+  const { data, error } = await supabase.from("turnos").select("*").eq("codigo", codigoTurno).maybeSingle();
+  if (error) throw new HttpError(500, error.message);
+
+  res.json({ data: dataAtualISO(), emHorarioOperacional: true, turno: data ? mapTurno(data as TurnoRow) : null });
 }

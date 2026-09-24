@@ -8,6 +8,7 @@ import {
   registrarPerda,
   registrarProducao,
 } from "../api/endpoints";
+import { extrairMensagemErro } from "../api/client";
 import type { MotivoPerda, Produto, Turno } from "../api/types";
 import { ConfirmToast } from "../components/tablet/ConfirmToast";
 import { MotivoPicker } from "../components/tablet/MotivoPicker";
@@ -27,6 +28,7 @@ export function Producao() {
   const [modo, setModo] = useState<Modo>("producao");
   const [data, setData] = useState(hojeISO());
   const [turnoId, setTurnoId] = useState<number | null>(null);
+  const [emHorarioOperacional, setEmHorarioOperacional] = useState(true);
   const [etapa, setEtapa] = useState<Etapa>({ tipo: "idle" });
   const [toast, setToast] = useState<{ mensagem: string; tipo: "sucesso" | "erro" } | null>(null);
 
@@ -37,7 +39,8 @@ export function Producao() {
         setTurnos(turnosResp);
         setMotivos(motivosResp);
         setData(contexto.data);
-        setTurnoId(contexto.turno.id);
+        setEmHorarioOperacional(contexto.emHorarioOperacional);
+        setTurnoId(contexto.turno?.id ?? null);
       }
     );
   }, []);
@@ -60,10 +63,15 @@ export function Producao() {
       try {
         await registrarProducao({ produtoId: produto.id, turnoId, data, quantidade });
         mostrarToast(`Produção registrada: ${quantidade} ${produto.nome}`, "sucesso");
-      } catch {
-        mostrarToast("Erro ao registrar produção", "erro");
+        setEtapa({ tipo: "idle" });
+      } catch (error) {
+        mostrarToast(
+          extrairMensagemErro(error, "Não foi possível registrar a produção. Verifique a conexão e tente novamente."),
+          "erro"
+        );
+        // Não limpa a etapa nem a quantidade digitada: o teclado permanece
+        // aberto para o usuário tentar novamente sem perder o que já digitou.
       }
-      setEtapa({ tipo: "idle" });
     } else {
       setEtapa({ tipo: "motivo", produto, quantidade });
     }
@@ -76,10 +84,14 @@ export function Producao() {
     try {
       await registrarPerda({ produtoId: produto.id, turnoId, motivoId: motivo.id, data, quantidade });
       mostrarToast(`Perda registrada: ${quantidade} ${produto.nome} (${motivo.nome})`, "sucesso");
-    } catch {
-      mostrarToast("Erro ao registrar perda", "erro");
+      setEtapa({ tipo: "idle" });
+    } catch (error) {
+      mostrarToast(
+        extrairMensagemErro(error, "Não foi possível registrar a perda. Verifique a conexão e tente novamente."),
+        "erro"
+      );
+      // Mantém produto/quantidade/motivo disponíveis para nova tentativa.
     }
-    setEtapa({ tipo: "idle" });
   }
 
   const classeAtivaProducao = "active:border-series-1 active:bg-series-1/10";
@@ -94,6 +106,12 @@ export function Producao() {
             Painel do Gestor
           </Link>
         </div>
+
+        {!emHorarioOperacional && (
+          <div className="rounded-xl border border-status-critical bg-status-critical/10 px-4 py-3 text-sm font-medium text-status-critical">
+            Fora do horário operacional. Selecione o turno manualmente para continuar lançando.
+          </div>
+        )}
 
         <ShiftDateBar
           data={data}

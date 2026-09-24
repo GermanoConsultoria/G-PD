@@ -1,12 +1,13 @@
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CHART_COLORS } from "../../utils/chartColors";
-import { formatarMoeda, formatarNumero } from "../../utils/format";
+import { formatarNumero } from "../../utils/format";
+import { formatarCentavos } from "../../utils/money";
 
 interface RankingItem {
   chave: number;
   nome: string;
   quantidade: number;
-  custoTotal: number;
+  custoTotalCentavos: number;
 }
 
 interface RankingChartProps {
@@ -22,7 +23,7 @@ function TooltipRanking({ active, payload }: any) {
     <div className="rounded-lg border border-grid bg-surface px-3 py-2 text-sm shadow-md">
       <p className="font-semibold text-ink-primary">{item.nome}</p>
       <p className="text-ink-secondary">{formatarNumero(item.quantidade)} un perdidas</p>
-      <p className="text-ink-secondary">{formatarMoeda(item.custoTotal)}</p>
+      <p className="text-ink-secondary">{formatarCentavos(item.custoTotalCentavos)}</p>
     </div>
   );
 }
@@ -73,7 +74,7 @@ export function RankingChart({ titulo, itens, vazio }: RankingChartProps) {
                   <tr key={item.chave} className="border-b border-grid last:border-0">
                     <td className="py-2 text-ink-primary">{item.nome}</td>
                     <td className="py-2 tabular-nums text-ink-secondary">{formatarNumero(item.quantidade)}</td>
-                    <td className="py-2 tabular-nums text-ink-secondary">{formatarMoeda(item.custoTotal)}</td>
+                    <td className="py-2 tabular-nums text-ink-secondary">{formatarCentavos(item.custoTotalCentavos)}</td>
                   </tr>
                 ))}
               </tbody>

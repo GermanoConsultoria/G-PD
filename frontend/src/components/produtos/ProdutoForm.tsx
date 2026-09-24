@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { Produto } from "../../api/types";
+import { formatarCentavos, parseReaisParaCentavos } from "../../utils/money";
 
 interface ProdutoFormProps {
   produtoEmEdicao: Produto | null;
-  onSalvar: (dados: { nome: string; categoria: string | null; unidade: string; custoUnitario: number }) => Promise<void>;
+  onSalvar: (dados: { nome: string; categoria: string | null; unidade: string; custoUnitarioCentavos: number }) => Promise<void>;
   onCancelarEdicao: () => void;
 }
 
@@ -19,7 +20,7 @@ export function ProdutoForm({ produtoEmEdicao, onSalvar, onCancelarEdicao }: Pro
         nome: produtoEmEdicao.nome,
         categoria: produtoEmEdicao.categoria ?? "",
         unidade: produtoEmEdicao.unidade,
-        custoUnitario: String(produtoEmEdicao.custoUnitario),
+        custoUnitario: formatarCentavos(produtoEmEdicao.custoUnitarioCentavos).replace(/[^\d,.-]/g, ""),
       });
     } else {
       setForm(vazio);
@@ -34,7 +35,7 @@ export function ProdutoForm({ produtoEmEdicao, onSalvar, onCancelarEdicao }: Pro
         nome: form.nome.trim(),
         categoria: form.categoria.trim() || null,
         unidade: form.unidade.trim() || "un",
-        custoUnitario: Number(form.custoUnitario.replace(",", ".")),
+        custoUnitarioCentavos: parseReaisParaCentavos(form.custoUnitario),
       });
       setForm(vazio);
     } finally {
@@ -42,7 +43,7 @@ export function ProdutoForm({ produtoEmEdicao, onSalvar, onCancelarEdicao }: Pro
     }
   }
 
-  const valido = form.nome.trim().length > 0 && Number(form.custoUnitario.replace(",", ".")) > 0;
+  const valido = form.nome.trim().length > 0 && parseReaisParaCentavos(form.custoUnitario) > 0;
 
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 rounded-2xl border border-grid bg-surface p-5 sm:grid-cols-4">
@@ -51,7 +52,7 @@ export function ProdutoForm({ produtoEmEdicao, onSalvar, onCancelarEdicao }: Pro
         <input
           value={form.nome}
           onChange={(e) => setForm({ ...form, nome: e.target.value })}
-          placeholder="Ex: Coxinha"
+          placeholder="Ex: Torta"
           className="w-full rounded-lg border border-grid px-3 py-2 text-sm"
           required
         />
@@ -62,7 +63,7 @@ export function ProdutoForm({ produtoEmEdicao, onSalvar, onCancelarEdicao }: Pro
         <input
           value={form.categoria}
           onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-          placeholder="Ex: Salgado"
+          placeholder="Ex: Torta"
           className="w-full rounded-lg border border-grid px-3 py-2 text-sm"
         />
       </div>
@@ -81,7 +82,7 @@ export function ProdutoForm({ produtoEmEdicao, onSalvar, onCancelarEdicao }: Pro
         <input
           value={form.custoUnitario}
           onChange={(e) => setForm({ ...form, custoUnitario: e.target.value })}
-          placeholder="Ex: 4.11"
+          placeholder="Ex: 4,11"
           inputMode="decimal"
           className="w-full rounded-lg border border-grid px-3 py-2 text-sm"
           required

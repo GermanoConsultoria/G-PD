@@ -1,7 +1,8 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { EvolucaoPerdaDia } from "../../api/types";
 import { CHART_COLORS } from "../../utils/chartColors";
-import { formatarDataCompleta, formatarDataCurta, formatarMoeda, formatarNumero } from "../../utils/format";
+import { formatarDataCompleta, formatarDataCurta, formatarNumero } from "../../utils/format";
+import { formatarCentavos } from "../../utils/money";
 
 interface TrendChartProps {
   dados: EvolucaoPerdaDia[];
@@ -14,7 +15,7 @@ function TooltipEvolucao({ active, payload }: any) {
     <div className="rounded-lg border border-grid bg-surface px-3 py-2 text-sm shadow-md">
       <p className="font-semibold text-ink-primary">{formatarDataCompleta(item.data)}</p>
       <p className="text-ink-secondary">{formatarNumero(item.quantidade)} un perdidas</p>
-      <p className="text-ink-secondary">{formatarMoeda(item.custoTotal)}</p>
+      <p className="text-ink-secondary">{formatarCentavos(item.custoTotalCentavos)}</p>
     </div>
   );
 }
@@ -78,7 +79,7 @@ export function TrendChart({ dados }: TrendChartProps) {
                   <tr key={item.data} className="border-b border-grid last:border-0">
                     <td className="py-2 text-ink-primary">{formatarDataCompleta(item.data)}</td>
                     <td className="py-2 tabular-nums text-ink-secondary">{formatarNumero(item.quantidade)}</td>
-                    <td className="py-2 tabular-nums text-ink-secondary">{formatarMoeda(item.custoTotal)}</td>
+                    <td className="py-2 tabular-nums text-ink-secondary">{formatarCentavos(item.custoTotalCentavos)}</td>
                   </tr>
                 ))}
               </tbody>

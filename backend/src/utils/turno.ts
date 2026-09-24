@@ -1,14 +1,34 @@
 /**
- * Deduz o turno e a data "atuais" a partir do horario do servidor, para que o
- * tablet de producao possa pre-selecionar esses valores sem exigir digitacao.
- * Turno 1: 06:00-14:00 | Turno 2: 14:00-22:00 | Fora da janela: cai no turno
- * mais proximo (madrugada -> T1, noite -> T2).
+ * Deduz o turno e o estado operacional "atuais" a partir do horario do
+ * servidor, para que o tablet de producao possa pre-selecionar esses valores
+ * sem exigir digitacao.
+ *
+ * Regra oficial (sem excecoes, sem "cair" em turno por proximidade):
+ *   Turno 1: 06:00 (inclusive) ate antes de 14:00
+ *   Turno 2: 14:00 (inclusive) ate antes de 22:00
+ *   Fora do horario operacional: 22:00 (inclusive) ate antes de 06:00
  */
-export function detectarTurnoAtual(agora: Date = new Date()): "T1" | "T2" {
-  const hora = agora.getHours();
-  if (hora >= 6 && hora < 14) return "T1";
-  if (hora >= 14 && hora < 22) return "T2";
-  return hora < 6 ? "T1" : "T2";
+export type CodigoTurno = "T1" | "T2";
+
+export interface ResultadoTurno {
+  emHorarioOperacional: boolean;
+  codigoTurno: CodigoTurno | null;
+}
+
+const INICIO_T1_MIN = 6 * 60; // 06:00
+const INICIO_T2_MIN = 14 * 60; // 14:00
+const FIM_OPERACAO_MIN = 22 * 60; // 22:00
+
+export function detectarTurnoAtual(agora: Date = new Date()): ResultadoTurno {
+  const minutosDoDia = agora.getHours() * 60 + agora.getMinutes();
+
+  if (minutosDoDia >= INICIO_T1_MIN && minutosDoDia < INICIO_T2_MIN) {
+    return { emHorarioOperacional: true, codigoTurno: "T1" };
+  }
+  if (minutosDoDia >= INICIO_T2_MIN && minutosDoDia < FIM_OPERACAO_MIN) {
+    return { emHorarioOperacional: true, codigoTurno: "T2" };
+  }
+  return { emHorarioOperacional: false, codigoTurno: null };
 }
 
 export function dataAtualISO(agora: Date = new Date()): string {

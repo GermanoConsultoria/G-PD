@@ -1,8 +1,13 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import { prisma } from "../db/prisma";
+import { supabase } from "../db/supabase";
 import { HttpError } from "../middleware/errorHandler";
-import { parseDataLancamento, resolverIntervaloDatas } from "../utils/dateRange";
+import { RequestComAdmin } from "../middleware/auth";
+import { resolverIntervaloDatas } from "../utils/dateRange";
+import { registrarAuditoria } from "../services/audit";
+import { ProducaoRow, mapProducao } from "../db/mappers";
+
+const PRODUCAO_SELECT = "*, produto:produtos(*), turno:turnos(*)";
 
 const producaoSchema = z.object({
   produtoId: z.number().int().positive(),
@@ -11,50 +16,146 @@ const producaoSchema = z.object({
   quantidade: z.number().int().positive("Quantidade deve ser maior que zero"),
 });
 
+const producaoUpdateSchema = producaoSchema.partial();
+
 export async function listarProducoes(req: Request, res: Response) {
   const { dataInicio, dataFim, produtoId, turnoId } = req.query as Record<string, string | undefined>;
   const { inicio, fim } = resolverIntervaloDatas(dataInicio, dataFim);
 
-  const producoes = await prisma.producao.findMany({
-    where: {
-      data: { gte: inicio, lte: fim },
-      produtoId: produtoId ? Number(produtoId) : undefined,
-      turnoId: turnoId ? Number(turnoId) : undefined,
-    },
-    include: { produto: true, turno: true },
-    orderBy: [{ data: "desc" }, { id: "desc" }],
-  });
+  let query = supabase
+    .from("producoes")
+    .select(PRODUCAO_SELECT)
+    .gte("data", inicio)
+    .lte("data", fim)
+    .order("data", { ascending: false })
+    .order("id", { ascending: false });
 
-  res.json(producoes);
+  if (produtoId) query = query.eq("produto_id", Number(produtoId));
+  if (turnoId) query = query.eq("turno_id", Number(turnoId));
+
+  const { data, error } = await query;
+  if (error) throw new HttpError(500, error.message);
+
+  res.json((data as unknown as ProducaoRow[]).map(mapProducao));
 }
 
 export async function registrarProducao(req: Request, res: Response) {
   const dados = producaoSchema.parse(req.body);
 
-  const produto = await prisma.produto.findUnique({ where: { id: dados.produtoId } });
+  const { data: produto, error: produtoError } = await supabase
+    .from("produtos")
+    .select("id")
+    .eq("id", dados.produtoId)
+    .maybeSingle();
+  if (produtoError) throw new HttpError(500, produtoError.message);
   if (!produto) throw new HttpError(404, "Produto não encontrado");
 
-  const turno = await prisma.turno.findUnique({ where: { id: dados.turnoId } });
+  const { data: turno, error: turnoError } = await supabase
+    .from("turnos")
+    .select("id")
+    .eq("id", dados.turnoId)
+    .maybeSingle();
+  if (turnoError) throw new HttpError(500, turnoError.message);
   if (!turno) throw new HttpError(404, "Turno não encontrado");
 
-  const producao = await prisma.producao.create({
-    data: {
-      produtoId: dados.produtoId,
-      turnoId: dados.turnoId,
-      data: parseDataLancamento(dados.data),
-      quantidade: dados.quantidade,
-    },
-    include: { produto: true, turno: true },
-  });
+  const { data, error } = await supabase
+    .from("producoes")
+    .insert({ produto_id: dados.produtoId, turno_id: dados.turnoId, data: dados.data, quantidade: dados.quantidade })
+    .select(PRODUCAO_SELECT)
+    .single();
+  if (error) throw new HttpError(400, error.message);
 
-  res.status(201).json(producao);
+  res.status(201).json(mapProducao(data as unknown as ProducaoRow));
 }
 
-export async function removerProducao(req: Request, res: Response) {
+export async function atualizarProducao(req: RequestComAdmin, res: Response) {
   const id = Number(req.params.id);
-  const existente = await prisma.producao.findUnique({ where: { id } });
-  if (!existente) throw new HttpError(404, "Lançamento não encontrado");
+  const dados = producaoUpdateSchema.parse(req.body);
 
-  await prisma.producao.delete({ where: { id } });
+  const { data: existenteRow, error: existenteError } = await supabase
+    .from("producoes")
+    .select(PRODUCAO_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (existenteError) throw new HttpError(500, existenteError.message);
+  if (!existenteRow) throw new HttpError(404, "Lançamento não encontrado");
+  const existente = mapProducao(existenteRow as unknown as ProducaoRow);
+
+  if (dados.produtoId !== undefined) {
+    const { data: produto, error } = await supabase.from("produtos").select("id").eq("id", dados.produtoId).maybeSingle();
+    if (error) throw new HttpError(500, error.message);
+    if (!produto) throw new HttpError(404, "Produto não encontrado");
+  }
+  if (dados.turnoId !== undefined) {
+    const { data: turno, error } = await supabase.from("turnos").select("id").eq("id", dados.turnoId).maybeSingle();
+    if (error) throw new HttpError(500, error.message);
+    if (!turno) throw new HttpError(404, "Turno não encontrado");
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (dados.produtoId !== undefined) patch.produto_id = dados.produtoId;
+  if (dados.turnoId !== undefined) patch.turno_id = dados.turnoId;
+  if (dados.data !== undefined) patch.data = dados.data;
+  if (dados.quantidade !== undefined) patch.quantidade = dados.quantidade;
+
+  const { data, error } = await supabase.from("producoes").update(patch).eq("id", id).select(PRODUCAO_SELECT).single();
+  if (error) throw new HttpError(400, error.message);
+  const producao = mapProducao(data as unknown as ProducaoRow);
+
+  const alteracoes: { campo: string; valorAnterior: unknown; valorNovo: unknown }[] = [];
+  if (producao.produtoId !== existente.produtoId) {
+    alteracoes.push({ campo: "produtoId", valorAnterior: existente.produtoId, valorNovo: producao.produtoId });
+  }
+  if (producao.turnoId !== existente.turnoId) {
+    alteracoes.push({ campo: "turnoId", valorAnterior: existente.turnoId, valorNovo: producao.turnoId });
+  }
+  if (producao.data !== existente.data) {
+    alteracoes.push({ campo: "data", valorAnterior: existente.data, valorNovo: producao.data });
+  }
+  if (producao.quantidade !== existente.quantidade) {
+    alteracoes.push({ campo: "quantidade", valorAnterior: existente.quantidade, valorNovo: producao.quantidade });
+  }
+
+  if (alteracoes.length > 0) {
+    await registrarAuditoria({
+      administrador: req.adminId ?? "ADMIN",
+      entidade: "Producao",
+      entidadeId: id,
+      acao: "EDICAO",
+      alteracoes,
+    });
+  }
+
+  res.json(producao);
+}
+
+export async function removerProducao(req: RequestComAdmin, res: Response) {
+  const id = Number(req.params.id);
+
+  const { data: existenteRow, error: existenteError } = await supabase
+    .from("producoes")
+    .select(PRODUCAO_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (existenteError) throw new HttpError(500, existenteError.message);
+  if (!existenteRow) throw new HttpError(404, "Lançamento não encontrado");
+  const existente = mapProducao(existenteRow as unknown as ProducaoRow);
+
+  const { error } = await supabase.from("producoes").delete().eq("id", id);
+  if (error) throw new HttpError(400, error.message);
+
+  await registrarAuditoria({
+    administrador: req.adminId ?? "ADMIN",
+    entidade: "Producao",
+    entidadeId: id,
+    acao: "EXCLUSAO",
+    snapshot: {
+      produto: existente.produto.nome,
+      turno: existente.turno.nome,
+      data: existente.data,
+      quantidade: existente.quantidade,
+    },
+  });
+
   res.status(204).send();
 }

@@ -3,7 +3,7 @@ export interface Produto {
   nome: string;
   categoria: string | null;
   unidade: string;
-  custoUnitario: number;
+  custoUnitarioCentavos: number;
   ativo: boolean;
   createdAt: string;
   updatedAt: string;
@@ -25,7 +25,8 @@ export interface MotivoPerda {
 
 export interface ContextoAtual {
   data: string;
-  turno: Turno;
+  emHorarioOperacional: boolean;
+  turno: Turno | null;
 }
 
 export interface Producao {
@@ -45,8 +46,8 @@ export interface Perda {
   motivoId: number;
   data: string;
   quantidade: number;
-  custoUnitarioHistorico: number;
-  custoTotal: number;
+  custoUnitarioHistoricoCentavos: number;
+  custoTotalCentavos: number;
   produto: Produto;
   turno: Turno;
   motivo: MotivoPerda;
@@ -56,25 +57,57 @@ export interface ResumoDashboard {
   totalProduzido: number;
   totalDescartado: number;
   taxaPerda: number;
-  custoTotalPerdas: number;
+  custoTotalPerdasCentavos: number;
 }
 
 export interface PerdaPorMotivo {
   motivoId: number;
   motivo: string;
   quantidade: number;
-  custoTotal: number;
+  custoTotalCentavos: number;
 }
 
 export interface PerdaPorProduto {
   produtoId: number;
   produto: string;
   quantidade: number;
-  custoTotal: number;
+  custoTotalCentavos: number;
 }
 
 export interface EvolucaoPerdaDia {
   data: string;
   quantidade: number;
-  custoTotal: number;
+  custoTotalCentavos: number;
+}
+
+export interface AnaliticoMotivo {
+  codigo: string;
+  nome: string;
+}
+
+export interface AnaliticoLinha {
+  produtoId: number;
+  produto: string;
+  produzido: number;
+  perdido: number;
+  percentualPerda: number;
+  porMotivo: Record<string, number>;
+  custoTotalCentavos: number;
+}
+
+export interface AnaliticoResponse {
+  motivos: AnaliticoMotivo[];
+  linhas: AnaliticoLinha[];
+}
+
+export interface AuditLog {
+  id: number;
+  criadoEm: string;
+  administrador: string;
+  entidade: string;
+  entidadeId: number;
+  acao: "CRIACAO" | "EDICAO" | "EXCLUSAO";
+  campo: string | null;
+  valorAnterior: string | null;
+  valorNovo: string | null;
 }
